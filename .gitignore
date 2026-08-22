@@ -1,0 +1,49 @@
+# Build output
+build/
+build-cmake/
+mingw-w64/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+
+# Binaries
+*.exe
+*.o
+*.obj
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Generated scenarios
+scenarios/generated/
+
+# Temporary controller tuning files
+scenarios/cruise_debug.json
+scenarios/cruise_tuning_current.json
+results/cruise_tuning_current.csv
+
+# Generated simulation output
+results/*.csv
+results/*.md
+results/*.png
+
+# Keep selected documentation images
+!docs/*.png
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

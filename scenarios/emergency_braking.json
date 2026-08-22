@@ -1,0 +1,10 @@
+{
+  "name": "Emergency Braking",
+  "outputFile": "results/emergency_braking.csv",
+  "initialVelocity": 25.0,
+  "acceleration": -6.0,
+  "steeringAngle": 0.0,
+  "wheelbase": 2.7,
+  "duration": 10.0,
+  "dt": 0.1
+}

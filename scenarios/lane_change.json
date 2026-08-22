@@ -1,0 +1,22 @@
+{
+  "name": "Lane Change",
+  "outputFile": "results/lane_change.csv",
+  "initialVelocity": 15.0,
+  "acceleration": 0.0,
+  "steeringAngle": 0.0,
+  "wheelbase": 2.7,
+  "duration": 5.0,
+  "dt": 0.1,
+  "steeringSchedule": [
+    {
+      "start": 1.0,
+      "end": 2.0,
+      "angle": 0.08
+    },
+    {
+      "start": 2.0,
+      "end": 3.0,
+      "angle": -0.08
+    }
+  ]
+}

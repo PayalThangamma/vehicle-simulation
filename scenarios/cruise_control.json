@@ -1,0 +1,17 @@
+{
+  "name": "Cruise Control Speed Tracking",
+  "outputFile": "results/cruise_control.csv",
+  "initialVelocity": 5.0,
+  "acceleration": 0.0,
+  "steeringAngle": 0.0,
+  "wheelbase": 2.7,
+  "duration": 15.0,
+  "dt": 0.1,
+  "integrationMethod": "RK4",
+  "cruiseControlEnabled": true,
+  "targetVelocity": 20.0,
+  "cruiseKp": 1.2,
+  "cruiseKi": 0.05,
+  "minimumAcceleration": -4.0,
+  "maximumAcceleration": 3.0
+}

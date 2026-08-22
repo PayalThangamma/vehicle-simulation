@@ -1,0 +1,21 @@
+{
+  "name": "Turn Sweep",
+  "initialVelocityValues": [
+    10.0,
+    15.0,
+    20.0
+  ],
+  "steeringAngleValues": [
+    0.03,
+    0.06,
+    0.09
+  ],
+  "integrationMethods": [
+    "Euler",
+    "RK4"
+  ],
+  "acceleration": 0.0,
+  "wheelbase": 2.7,
+  "duration": 4.0,
+  "dt": 0.1
+}

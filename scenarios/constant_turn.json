@@ -1,0 +1,11 @@
+{
+  "name": "Constant Turn",
+  "outputFile": "results/constant_turn.csv",
+  "initialVelocity": 10.0,
+  "acceleration": 0.0,
+  "steeringAngle": 0.1,
+  "wheelbase": 2.7,
+  "duration": 5.0,
+  "dt": 0.1,
+  "integrationMethod": "RK4"
+}
