@@ -1,136 +1,314 @@
-#include <cmath>
-#include <iomanip>
-#include <iostream>
-#include <vector>
-
+#include "scenario.hpp"
 #include "vehicle_model.hpp"
 
+#include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <stdexcept>
+#include <vector>
 
-VehicleState runSimulationWithMethod(
-    Scenario scenario,
+
+namespace fs = std::filesystem;
+
+struct SimulationResult {
+    VehicleState state;
+    int steps;
+    double simulatedTime;
+};
+
+SimulationResult runSimulation(
+    double dt,
     IntegrationMethod method
 ) {
-    VehicleState car{
+    Scenario scenario{};
+
+    scenario.name =
+        "Timestep Sensitivity";
+
+    scenario.outputFile =
+        "";
+
+    scenario.initialVelocity =
+        15.0;
+
+    scenario.acceleration =
+        0.0;
+
+    scenario.steeringAngle =
+        0.08;
+
+    scenario.wheelbase =
+        2.7;
+
+    scenario.duration =
+        5.0;
+
+    scenario.dt =
+        dt;
+
+    scenario.integrationMethod =
+        (
+            method == IntegrationMethod::Euler
+            ? "Euler"
+            : "RK4"
+        );
+
+    scenario.cruiseControlEnabled =
+        false;
+
+    scenario.targetVelocity =
+        scenario.initialVelocity;
+
+    scenario.cruiseKp =
+        0.0;
+
+    scenario.cruiseKi =
+        0.0;
+
+    scenario.minimumAcceleration =
+        -10.0;
+
+    scenario.maximumAcceleration =
+        10.0;
+
+
+    VehicleState vehicle{
         0.0,
         0.0,
         scenario.initialVelocity,
         0.0
     };
 
-    double currentTime = 0.0;
 
-    while (currentTime < scenario.duration) {
+    const int numberOfSteps =
+        static_cast<int>(
+            std::llround(
+                scenario.duration
+                /
+                scenario.dt
+            )
+        );
 
+
+    for (
+        int step = 0;
+        step < numberOfSteps;
+        ++step
+    ) {
         updateVehicle(
-            car,
+            vehicle,
             scenario,
             scenario.steeringAngle,
             method
         );
-
-        currentTime += scenario.dt;
     }
 
-    return car;
-}
+
+    const double simulatedTime =
+        numberOfSteps
+        *
+        scenario.dt;
 
 
-double positionDifference(
-    const VehicleState& a,
-    const VehicleState& b
-) {
-    const double dx = a.x - b.x;
-    const double dy = a.y - b.y;
-
-    return std::sqrt(
-        dx * dx + dy * dy
-    );
+    return {
+        vehicle,
+        numberOfSteps,
+        simulatedTime
+    };
 }
 
 
 int main() {
+    try {
+        const std::vector<double> timesteps{
+            0.50,
+            0.20,
+            0.10,
+            0.05,
+            0.01
+        };
 
-    std::vector<double> timeSteps{
-        0.5,
-        0.2,
-        0.1,
-        0.05,
-        0.01
-    };
-
-
-    Scenario scenario{};
-
-    scenario.initialVelocity = 15.0;
-    scenario.acceleration = 0.0;
-    scenario.steeringAngle = 0.1;
-    scenario.wheelbase = 2.7;
-    scenario.duration = 5.0;
+        const fs::path resultsDirectory =
+            fs::path("results");
 
 
-    std::cout
-        << "\n===============================================\n";
-
-    std::cout
-        << "Timestep Sensitivity: Euler vs RK4\n";
-
-    std::cout
-        << "===============================================\n\n";
+        fs::create_directories(
+            resultsDirectory
+        );
 
 
-    std::cout
-        << std::left
-        << std::setw(10) << "dt"
-        << std::setw(18) << "Euler X"
-        << std::setw(18) << "Euler Y"
-        << std::setw(18) << "RK4 X"
-        << std::setw(18) << "RK4 Y"
-        << std::setw(18) << "Position Error"
-        << "\n";
+        const fs::path outputPath =
+            resultsDirectory
+            /
+            "timestep_sensitivity.csv";
 
 
-    for (double dt : timeSteps) {
+        std::ofstream outputFile(
+            outputPath
+        );
 
-        scenario.dt = dt;
 
-
-        VehicleState euler =
-            runSimulationWithMethod(
-                scenario,
-                IntegrationMethod::Euler
+        if (
+            !outputFile.is_open()
+        ) {
+            throw std::runtime_error(
+                "Could not create output file: "
+                +
+                outputPath.string()
             );
+        }
 
 
-        VehicleState rk4 =
-            runSimulationWithMethod(
-                scenario,
-                IntegrationMethod::RK4
-            );
-
-
-        const double error =
-            positionDifference(
-                euler,
-                rk4
-            );
+        outputFile
+            << "dt,"
+            << "steps,"
+            << "simulated_time,"
+            << "position_difference,"
+            << "heading_difference\n";
 
 
         std::cout
-            << std::left
-            << std::setw(10) << dt
-            << std::setw(18) << euler.x
-            << std::setw(18) << euler.y
-            << std::setw(18) << rk4.x
-            << std::setw(18) << rk4.y
-            << std::setw(18) << error
+            << "\n============================================\n"
+            << "Timestep Sensitivity Analysis\n"
+            << "============================================\n";
+
+
+        std::cout
+            << std::fixed
+            << std::setprecision(6);
+
+
+        for (
+            const double dt :
+            timesteps
+        ) {
+            const SimulationResult eulerResult =
+                runSimulation(
+                    dt,
+                    IntegrationMethod::Euler
+                );
+
+
+            const SimulationResult rk4Result =
+                runSimulation(
+                    dt,
+                    IntegrationMethod::RK4
+                );
+
+
+            const double deltaX =
+                eulerResult.state.x
+                -
+                rk4Result.state.x;
+
+
+            const double deltaY =
+                eulerResult.state.y
+                -
+                rk4Result.state.y;
+
+
+            const double positionDifference =
+                std::sqrt(
+                    deltaX * deltaX
+                    +
+                    deltaY * deltaY
+                );
+
+
+            const double headingDifference =
+                std::abs(
+                    eulerResult.state.heading
+                    -
+                    rk4Result.state.heading
+                );
+
+
+            std::cout
+                << "\ndt: "
+                << dt
+                << " s\n";
+
+
+            std::cout
+                << "Steps: "
+                << eulerResult.steps
+                << "\n";
+
+
+            std::cout
+                << "Simulated time: "
+                << eulerResult.simulatedTime
+                << " s\n";
+
+
+            std::cout
+                << "Euler final position: ("
+                << eulerResult.state.x
+                << ", "
+                << eulerResult.state.y
+                << ")\n";
+
+
+            std::cout
+                << "RK4 final position: ("
+                << rk4Result.state.x
+                << ", "
+                << rk4Result.state.y
+                << ")\n";
+
+
+            std::cout
+                << "Position difference: "
+                << positionDifference
+                << " m\n";
+
+
+            std::cout
+                << "Heading difference: "
+                << headingDifference
+                << " rad\n";
+
+
+            outputFile
+                << dt << ","
+                << eulerResult.steps << ","
+                << eulerResult.simulatedTime << ","
+                << positionDifference << ","
+                << headingDifference
+                << "\n";
+        }
+
+
+        outputFile.close();
+
+
+        std::cout
+            << "\n============================================\n";
+
+
+        std::cout
+            << "Results saved to: "
+            << outputPath.string()
             << "\n";
+
+
+        std::cout
+            << "============================================\n";
+
+
+        return 0;
     }
+    catch (
+        const std::exception& exception
+    ) {
+        std::cerr
+            << "ERROR: "
+            << exception.what()
+            << "\n";
 
-
-    std::cout
-        << "\nSmaller dt should reduce the difference "
-        << "between Euler and RK4.\n";
-
-
-    return 0;
+        return 1;
+    }
 }
