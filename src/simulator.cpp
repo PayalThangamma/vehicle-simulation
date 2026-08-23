@@ -94,7 +94,6 @@ static double calculateCruiseAcceleration(
         );
 
 
-
     const bool saturatedHigh =
         unconstrainedCommand
         >
@@ -138,10 +137,77 @@ static double calculateCruiseAcceleration(
     return accelerationCommand;
 }
 
+
+static double calculateAdaptiveCruiseAcceleration(
+    const Scenario& scenario,
+    const VehicleState& egoVehicle,
+    double leadVehiclePosition,
+    double leadVehicleVelocity
+) {
+    const double actualGap =
+        leadVehiclePosition
+        -
+        egoVehicle.x;
+
+
+    const double desiredGap =
+        scenario.minimumFollowingDistance
+        +
+        scenario.desiredTimeHeadway
+        *
+        egoVehicle.velocity;
+
+
+    const double gapError =
+        actualGap
+        -
+        desiredGap;
+
+
+    const double relativeVelocity =
+        leadVehicleVelocity
+        -
+        egoVehicle.velocity;
+
+
+    const double unconstrainedCommand =
+        scenario.accGapKp
+        *
+        gapError
+        +
+        scenario.accRelativeVelocityKp
+        *
+        relativeVelocity;
+
+
+    return std::clamp(
+        unconstrainedCommand,
+        scenario.minimumAcceleration,
+        scenario.maximumAcceleration
+    );
+}
+
+
+static double getLeadVehicleAcceleration(
+    const Scenario& scenario,
+    double currentTime
+) {
+    if (
+        currentTime >= scenario.leadVehicleBrakeStart
+        &&
+        currentTime < scenario.leadVehicleBrakeEnd
+    ) {
+        return scenario.leadVehicleBrakeAcceleration;
+    }
+
+    return 0.0;
+}
+
+
 void runSimulation(
     const Scenario& scenario
 ) {
-    VehicleState car{
+    VehicleState egoVehicle{
         0.0,
         0.0,
         scenario.initialVelocity,
@@ -161,6 +227,20 @@ void runSimulation(
         getIntegrationMethod(
             scenario
         );
+
+
+
+    double leadVehiclePosition =
+        scenario.leadVehicleInitialDistance;
+
+
+    double leadVehicleVelocity =
+        scenario.leadVehicleInitialVelocity;
+
+
+    double leadVehicleAcceleration =
+        0.0;
+
 
 
     const fs::path outputPath(
@@ -192,6 +272,7 @@ void runSimulation(
         );
     }
 
+
     file
         << "time,"
         << "x,"
@@ -202,7 +283,14 @@ void runSimulation(
         << "steering_angle,"
         << "wheelbase,"
         << "target_velocity,"
-        << "speed_error\n";
+        << "speed_error,"
+        << "lead_vehicle_position,"
+        << "lead_vehicle_velocity,"
+        << "lead_vehicle_acceleration,"
+        << "actual_gap,"
+        << "desired_gap,"
+        << "gap_error,"
+        << "relative_velocity\n";
 
 
     double currentSteering =
@@ -224,6 +312,22 @@ void runSimulation(
         0.0;
 
 
+    double actualGap =
+        0.0;
+
+
+    double desiredGap =
+        0.0;
+
+
+    double gapError =
+        0.0;
+
+
+    double relativeVelocity =
+        0.0;
+
+
     if (
         scenario.cruiseControlEnabled
     ) {
@@ -236,21 +340,64 @@ void runSimulation(
         speedError =
             scenario.targetVelocity
             -
-            car.velocity;
+            egoVehicle.velocity;
+    }
+
+
+    if (
+        scenario.adaptiveCruiseControlEnabled
+    ) {
+        currentAcceleration =
+            0.0;
+
+        actualGap =
+            leadVehiclePosition
+            -
+            egoVehicle.x;
+
+        desiredGap =
+            scenario.minimumFollowingDistance
+            +
+            scenario.desiredTimeHeadway
+            *
+            egoVehicle.velocity;
+
+        gapError =
+            actualGap
+            -
+            desiredGap;
+
+        relativeVelocity =
+            leadVehicleVelocity
+            -
+            egoVehicle.velocity;
+
+        targetVelocityForLog =
+            leadVehicleVelocity;
+
+        speedError =
+            relativeVelocity;
     }
 
 
     file
         << currentTime << ","
-        << car.x << ","
-        << car.y << ","
-        << car.velocity << ","
-        << car.heading << ","
+        << egoVehicle.x << ","
+        << egoVehicle.y << ","
+        << egoVehicle.velocity << ","
+        << egoVehicle.heading << ","
         << currentAcceleration << ","
         << currentSteering << ","
         << scenario.wheelbase << ","
         << targetVelocityForLog << ","
-        << speedError
+        << speedError << ","
+        << leadVehiclePosition << ","
+        << leadVehicleVelocity << ","
+        << leadVehicleAcceleration << ","
+        << actualGap << ","
+        << desiredGap << ","
+        << gapError << ","
+        << relativeVelocity
         << "\n";
 
 
@@ -324,6 +471,18 @@ void runSimulation(
         << "\n";
 
 
+    std::cout
+        << "Adaptive Cruise Control: "
+        << (
+            scenario.adaptiveCruiseControlEnabled
+            ?
+            "Enabled"
+            :
+            "Disabled"
+        )
+        << "\n";
+
+
     if (
         scenario.cruiseControlEnabled
     ) {
@@ -358,6 +517,68 @@ void runSimulation(
     }
 
 
+    if (
+        scenario.adaptiveCruiseControlEnabled
+    ) {
+        std::cout
+            << "Lead initial distance: "
+            << scenario.leadVehicleInitialDistance
+            << " m\n";
+
+
+        std::cout
+            << "Lead initial velocity: "
+            << scenario.leadVehicleInitialVelocity
+            << " m/s\n";
+
+
+        std::cout
+            << "Lead braking interval: ["
+            << scenario.leadVehicleBrakeStart
+            << ", "
+            << scenario.leadVehicleBrakeEnd
+            << "] s\n";
+
+
+        std::cout
+            << "Lead braking acceleration: "
+            << scenario.leadVehicleBrakeAcceleration
+            << " m/s^2\n";
+
+
+        std::cout
+            << "Desired time headway: "
+            << scenario.desiredTimeHeadway
+            << " s\n";
+
+
+        std::cout
+            << "Minimum following distance: "
+            << scenario.minimumFollowingDistance
+            << " m\n";
+
+
+        std::cout
+            << "ACC gap gain: "
+            << scenario.accGapKp
+            << "\n";
+
+
+        std::cout
+            << "ACC relative velocity gain: "
+            << scenario.accRelativeVelocityKp
+            << "\n";
+
+
+        std::cout
+            << "Acceleration limits: ["
+            << scenario.minimumAcceleration
+            << ", "
+            << scenario.maximumAcceleration
+            << "] m/s^2\n";
+    }
+
+
     std::cout
         << "============================================\n";
 
@@ -365,7 +586,9 @@ void runSimulation(
     constexpr double timeTolerance =
         1e-9;
 
-    while (true) {
+    while (
+        true
+    ) {
         const double nextTime =
             currentTime
             +
@@ -391,19 +614,67 @@ void runSimulation(
 
 
         if (
+            scenario.adaptiveCruiseControlEnabled
+        ) {
+            leadVehicleAcceleration =
+                getLeadVehicleAcceleration(
+                    scenario,
+                    currentTime
+                );
+
+
+            leadVehiclePosition =
+                leadVehiclePosition
+                +
+                leadVehicleVelocity
+                *
+                scenario.dt;
+
+
+            leadVehicleVelocity =
+                leadVehicleVelocity
+                +
+                leadVehicleAcceleration
+                *
+                scenario.dt;
+
+
+            if (
+                leadVehicleVelocity < 0.0
+            ) {
+                leadVehicleVelocity =
+                    0.0;
+            }
+        }
+
+
+        if (
             scenario.cruiseControlEnabled
         ) {
             currentAcceleration =
                 calculateCruiseAcceleration(
                     scenario,
-                    car,
+                    egoVehicle,
                     integralSpeedError
+                );
+        }
+        else if (
+            scenario.adaptiveCruiseControlEnabled
+        ) {
+            currentAcceleration =
+                calculateAdaptiveCruiseAcceleration(
+                    scenario,
+                    egoVehicle,
+                    leadVehiclePosition,
+                    leadVehicleVelocity
                 );
         }
         else {
             currentAcceleration =
                 scenario.acceleration;
         }
+
+
 
         Scenario stepScenario =
             scenario;
@@ -414,7 +685,7 @@ void runSimulation(
 
 
         updateVehicle(
-            car,
+            egoVehicle,
             stepScenario,
             currentSteering,
             integrationMethod
@@ -438,7 +709,6 @@ void runSimulation(
                 scenario.duration;
         }
 
-
         if (
             scenario.cruiseControlEnabled
         ) {
@@ -449,16 +719,84 @@ void runSimulation(
             speedError =
                 scenario.targetVelocity
                 -
-                car.velocity;
+                egoVehicle.velocity;
+
+
+            actualGap =
+                0.0;
+
+
+            desiredGap =
+                0.0;
+
+
+            gapError =
+                0.0;
+
+
+            relativeVelocity =
+                0.0;
+        }
+        else if (
+            scenario.adaptiveCruiseControlEnabled
+        ) {
+            actualGap =
+                leadVehiclePosition
+                -
+                egoVehicle.x;
+
+
+            desiredGap =
+                scenario.minimumFollowingDistance
+                +
+                scenario.desiredTimeHeadway
+                *
+                egoVehicle.velocity;
+
+
+            gapError =
+                actualGap
+                -
+                desiredGap;
+
+
+            relativeVelocity =
+                leadVehicleVelocity
+                -
+                egoVehicle.velocity;
+
+
+            targetVelocityForLog =
+                leadVehicleVelocity;
+
+
+            speedError =
+                relativeVelocity;
         }
         else {
             targetVelocityForLog =
-                car.velocity;
+                egoVehicle.velocity;
+
 
             speedError =
                 0.0;
-        }
 
+
+            actualGap =
+                0.0;
+
+
+            desiredGap =
+                0.0;
+
+
+            gapError =
+                0.0;
+
+
+            relativeVelocity =
+                0.0;
+        }
 
         std::cout
             << "Time: "
@@ -466,19 +804,19 @@ void runSimulation(
             << " s"
 
             << " | X: "
-            << car.x
+            << egoVehicle.x
             << " m"
 
             << " | Y: "
-            << car.y
+            << egoVehicle.y
             << " m"
 
             << " | Velocity: "
-            << car.velocity
+            << egoVehicle.velocity
             << " m/s"
 
             << " | Heading: "
-            << car.heading
+            << egoVehicle.heading
             << " rad"
 
             << " | Accel cmd: "
@@ -504,28 +842,74 @@ void runSimulation(
         }
 
 
+        if (
+            scenario.adaptiveCruiseControlEnabled
+        ) {
+            std::cout
+                << " | Lead velocity: "
+                << leadVehicleVelocity
+                << " m/s"
+
+                << " | Gap: "
+                << actualGap
+                << " m"
+
+                << " | Desired gap: "
+                << desiredGap
+                << " m"
+
+                << " | Gap error: "
+                << gapError
+                << " m"
+
+                << " | Relative velocity: "
+                << relativeVelocity
+                << " m/s";
+        }
+
+
         std::cout
             << "\n";
 
-
         file
             << currentTime << ","
-            << car.x << ","
-            << car.y << ","
-            << car.velocity << ","
-            << car.heading << ","
+            << egoVehicle.x << ","
+            << egoVehicle.y << ","
+            << egoVehicle.velocity << ","
+            << egoVehicle.heading << ","
             << currentAcceleration << ","
             << currentSteering << ","
             << scenario.wheelbase << ","
             << targetVelocityForLog << ","
-            << speedError
+            << speedError << ","
+            << leadVehiclePosition << ","
+            << leadVehicleVelocity << ","
+            << leadVehicleAcceleration << ","
+            << actualGap << ","
+            << desiredGap << ","
+            << gapError << ","
+            << relativeVelocity
             << "\n";
 
 
         if (
+            scenario.adaptiveCruiseControlEnabled
+            &&
+            actualGap <= 0.0
+        ) {
+            std::cout
+                << "WARNING: Ego vehicle reached "
+                << "the lead vehicle position.\n";
+
+            break;
+        }
+
+        if (
             !scenario.cruiseControlEnabled
             &&
-            car.velocity <= 0.0
+            !scenario.adaptiveCruiseControlEnabled
+            &&
+            egoVehicle.velocity <= 0.0
             &&
             scenario.acceleration < 0.0
         ) {

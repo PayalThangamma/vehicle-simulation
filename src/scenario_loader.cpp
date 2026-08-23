@@ -13,225 +13,345 @@ using json = nlohmann::json;
 Scenario loadScenario(
     const std::string& filePath
 ) {
-    std::ifstream file(filePath);
+    std::ifstream file(
+        filePath
+    );
 
-    if (!file.is_open()) {
+
+    if (
+        !file.is_open()
+    ) {
         throw std::runtime_error(
             "Could not open scenario file: "
-            + filePath
+            +
+            filePath
         );
     }
 
 
-    json jsonData;
+    json scenarioJson;
 
 
     try {
-        file >> jsonData;
+        file >> scenarioJson;
     }
     catch (
-        const json::parse_error& error
+        const std::exception& exception
     ) {
         throw std::runtime_error(
-            "Invalid JSON in scenario file: "
-            + filePath
-            + "\n"
-            + error.what()
+            "Failed to parse JSON file: "
+            +
+            filePath
+            +
+            "\nReason: "
+            +
+            exception.what()
         );
     }
 
 
     Scenario scenario{};
 
-
-    try {
-
-        scenario.name =
-            jsonData.at("name")
-            .get<std::string>();
+    scenario.name =
+        scenarioJson.at(
+            "name"
+        ).get<std::string>();
 
 
-        scenario.outputFile =
-            jsonData.at("outputFile")
-            .get<std::string>();
+    scenario.outputFile =
+        scenarioJson.at(
+            "outputFile"
+        ).get<std::string>();
 
 
-        scenario.initialVelocity =
-            jsonData.at("initialVelocity")
-            .get<double>();
+    scenario.initialVelocity =
+        scenarioJson.at(
+            "initialVelocity"
+        ).get<double>();
 
 
-        scenario.acceleration =
-            jsonData.at("acceleration")
-            .get<double>();
+    scenario.acceleration =
+        scenarioJson.at(
+            "acceleration"
+        ).get<double>();
 
 
-        scenario.steeringAngle =
-            jsonData.at("steeringAngle")
-            .get<double>();
+    scenario.steeringAngle =
+        scenarioJson.at(
+            "steeringAngle"
+        ).get<double>();
 
 
-        scenario.wheelbase =
-            jsonData.at("wheelbase")
-            .get<double>();
+    scenario.wheelbase =
+        scenarioJson.at(
+            "wheelbase"
+        ).get<double>();
 
 
-        scenario.duration =
-            jsonData.at("duration")
-            .get<double>();
+    scenario.duration =
+        scenarioJson.at(
+            "duration"
+        ).get<double>();
 
 
-        scenario.dt =
-            jsonData.at("dt")
-            .get<double>();
-
-        scenario.integrationMethod =
-            jsonData.value(
-                "integrationMethod",
-                std::string("Euler")
-            );
+    scenario.dt =
+        scenarioJson.at(
+            "dt"
+        ).get<double>();
 
 
-        scenario.cruiseControlEnabled = false;
-
-        scenario.targetVelocity =
-            scenario.initialVelocity;
-
-        scenario.cruiseKp = 0.0;
-
-        scenario.cruiseKi = 0.0;
-
-        scenario.minimumAcceleration = -6.0;
-
-        scenario.maximumAcceleration = 3.0;
+    scenario.integrationMethod =
+        scenarioJson.value(
+            "integrationMethod",
+            "Euler"
+        );
 
 
-        if (
-            jsonData.contains(
-                "cruiseControlEnabled"
-            )
-        ) {
-
-            scenario.cruiseControlEnabled =
-                jsonData.at(
-                    "cruiseControlEnabled"
-                )
-                .get<bool>();
-        }
+    scenario.steeringSchedule.clear();
 
 
-        if (
-            scenario.cruiseControlEnabled
-        ) {
-
-            scenario.targetVelocity =
-                jsonData.at(
-                    "targetVelocity"
-                )
-                .get<double>();
-
-
-            scenario.cruiseKp =
-                jsonData.at(
-                    "cruiseKp"
-                )
-                .get<double>();
-
-
-            scenario.cruiseKi =
-                jsonData.at(
-                    "cruiseKi"
-                )
-                .get<double>();
-
-
-            scenario.minimumAcceleration =
-                jsonData.at(
-                    "minimumAcceleration"
-                )
-                .get<double>();
-
-
-            scenario.maximumAcceleration =
-                jsonData.at(
-                    "maximumAcceleration"
-                )
-                .get<double>();
-        }
-
-        if (
-            jsonData.contains(
+    if (
+        scenarioJson.contains(
+            "steeringSchedule"
+        )
+    ) {
+        for (
+            const auto& eventJson :
+            scenarioJson.at(
                 "steeringSchedule"
             )
         ) {
+            SteeringEvent event{};
 
-            for (
-                const auto& eventJson :
-                jsonData.at(
-                    "steeringSchedule"
-                )
+            event.start =
+                eventJson.at(
+                    "start"
+                ).get<double>();
+
+            event.end =
+                eventJson.at(
+                    "end"
+                ).get<double>();
+
+            event.angle =
+                eventJson.at(
+                    "angle"
+                ).get<double>();
+
+
+            if (
+                event.start < 0.0
             ) {
-
-                SteeringEvent event{};
-
-
-                event.start =
-                    eventJson.at("start")
-                    .get<double>();
-
-
-                event.end =
-                    eventJson.at("end")
-                    .get<double>();
-
-
-                event.angle =
-                    eventJson.at("angle")
-                    .get<double>();
-
-
-                if (
-                    event.start < 0.0
-                ) {
-                    throw std::runtime_error(
-                        "Steering event start time "
-                        "cannot be negative."
-                    );
-                }
-
-
-                if (
-                    event.end <= event.start
-                ) {
-                    throw std::runtime_error(
-                        "Steering event end time must be "
-                        "greater than start time."
-                    );
-                }
-
-
-                scenario.steeringSchedule.push_back(
-                    event
+                throw std::runtime_error(
+                    "Steering event start time "
+                    "cannot be negative."
                 );
             }
+
+
+            if (
+                event.end <= event.start
+            ) {
+                throw std::runtime_error(
+                    "Steering event end time must "
+                    "be greater than start time."
+                );
+            }
+
+
+            scenario.steeringSchedule.push_back(
+                event
+            );
         }
     }
-    catch (
-        const json::exception& error
-    ) {
-        throw std::runtime_error(
-            "Invalid scenario configuration in: "
-            + filePath
-            + "\n"
-            + error.what()
+
+
+    scenario.cruiseControlEnabled =
+        scenarioJson.value(
+            "cruiseControlEnabled",
+            false
         );
+
+
+    scenario.targetVelocity =
+        scenario.initialVelocity;
+
+
+    scenario.cruiseKp =
+        0.0;
+
+
+    scenario.cruiseKi =
+        0.0;
+
+
+    scenario.minimumAcceleration =
+        -10.0;
+
+
+    scenario.maximumAcceleration =
+        10.0;
+
+
+    scenario.adaptiveCruiseControlEnabled =
+        scenarioJson.value(
+            "adaptiveCruiseControlEnabled",
+            false
+        );
+
+
+    scenario.leadVehicleInitialDistance =
+        0.0;
+
+
+    scenario.leadVehicleInitialVelocity =
+        0.0;
+
+
+    scenario.leadVehicleBrakeStart =
+        0.0;
+
+
+    scenario.leadVehicleBrakeEnd =
+        0.0;
+
+
+    scenario.leadVehicleBrakeAcceleration =
+        0.0;
+
+
+    scenario.desiredTimeHeadway =
+        0.0;
+
+
+    scenario.minimumFollowingDistance =
+        0.0;
+
+
+    scenario.accGapKp =
+        0.0;
+
+
+    scenario.accRelativeVelocityKp =
+        0.0;
+
+    if (
+        scenario.cruiseControlEnabled
+    ) {
+        scenario.targetVelocity =
+            scenarioJson.at(
+                "targetVelocity"
+            ).get<double>();
+
+
+        scenario.cruiseKp =
+            scenarioJson.at(
+                "cruiseKp"
+            ).get<double>();
+
+
+        scenario.cruiseKi =
+            scenarioJson.at(
+                "cruiseKi"
+            ).get<double>();
+
+
+        scenario.minimumAcceleration =
+            scenarioJson.at(
+                "minimumAcceleration"
+            ).get<double>();
+
+
+        scenario.maximumAcceleration =
+            scenarioJson.at(
+                "maximumAcceleration"
+            ).get<double>();
+    }
+
+
+    if (
+        scenario.adaptiveCruiseControlEnabled
+    ) {
+        scenario.leadVehicleInitialDistance =
+            scenarioJson.at(
+                "leadVehicleInitialDistance"
+            ).get<double>();
+
+
+        scenario.leadVehicleInitialVelocity =
+            scenarioJson.at(
+                "leadVehicleInitialVelocity"
+            ).get<double>();
+
+
+        scenario.leadVehicleBrakeStart =
+            scenarioJson.at(
+                "leadVehicleBrakeStart"
+            ).get<double>();
+
+
+        scenario.leadVehicleBrakeEnd =
+            scenarioJson.at(
+                "leadVehicleBrakeEnd"
+            ).get<double>();
+
+
+        scenario.leadVehicleBrakeAcceleration =
+            scenarioJson.at(
+                "leadVehicleBrakeAcceleration"
+            ).get<double>();
+
+
+        scenario.desiredTimeHeadway =
+            scenarioJson.at(
+                "desiredTimeHeadway"
+            ).get<double>();
+
+
+        scenario.minimumFollowingDistance =
+            scenarioJson.at(
+                "minimumFollowingDistance"
+            ).get<double>();
+
+
+        scenario.accGapKp =
+            scenarioJson.at(
+                "accGapKp"
+            ).get<double>();
+
+
+        scenario.accRelativeVelocityKp =
+            scenarioJson.at(
+                "accRelativeVelocityKp"
+            ).get<double>();
+
+
+        scenario.minimumAcceleration =
+            scenarioJson.at(
+                "minimumAcceleration"
+            ).get<double>();
+
+
+        scenario.maximumAcceleration =
+            scenarioJson.at(
+                "maximumAcceleration"
+            ).get<double>();
     }
 
     if (
-        scenario.dt <= 0.0
+        scenario.initialVelocity < 0.0
     ) {
         throw std::runtime_error(
-            "Scenario dt must be greater than zero."
+            "Initial velocity cannot be negative."
+        );
+    }
+
+
+    if (
+        scenario.wheelbase <= 0.0
+    ) {
+        throw std::runtime_error(
+            "Wheelbase must be greater than zero."
         );
     }
 
@@ -246,19 +366,20 @@ Scenario loadScenario(
 
 
     if (
-        scenario.wheelbase <= 0.0
+        scenario.dt <= 0.0
     ) {
         throw std::runtime_error(
-            "Scenario wheelbase must be greater than zero."
+            "Simulation timestep must be greater than zero."
         );
     }
 
 
     if (
-        scenario.initialVelocity < 0.0
+        scenario.dt > scenario.duration
     ) {
         throw std::runtime_error(
-            "Initial velocity cannot be negative."
+            "Simulation timestep cannot be larger "
+            "than scenario duration."
         );
     }
 
@@ -273,52 +394,144 @@ Scenario loadScenario(
         scenario.integrationMethod != "rk4"
     ) {
         throw std::runtime_error(
-            "Invalid integration method: "
-            + scenario.integrationMethod
-            + ". Expected Euler or RK4."
+            "Unsupported integration method: "
+            +
+            scenario.integrationMethod
+        );
+    }
+
+
+    if (
+        scenario.minimumAcceleration
+        >
+        scenario.maximumAcceleration
+    ) {
+        throw std::runtime_error(
+            "minimumAcceleration must be less than "
+            "or equal to maximumAcceleration."
         );
     }
 
     if (
         scenario.cruiseControlEnabled
+        &&
+        scenario.adaptiveCruiseControlEnabled
     ) {
+        throw std::runtime_error(
+            "Cruise control and Adaptive Cruise Control "
+            "cannot both be enabled in the same scenario."
+        );
+    }
 
+
+    if (
+        scenario.cruiseControlEnabled
+    ) {
         if (
             scenario.targetVelocity < 0.0
         ) {
             throw std::runtime_error(
-                "Cruise target velocity cannot "
-                "be negative."
+                "Cruise-control target velocity "
+                "cannot be negative."
             );
         }
 
 
         if (
             scenario.cruiseKp < 0.0
-        ) {
-            throw std::runtime_error(
-                "Cruise Kp must be non-negative."
-            );
-        }
-
-
-        if (
+            ||
             scenario.cruiseKi < 0.0
         ) {
             throw std::runtime_error(
-                "Cruise Ki must be non-negative."
+                "Cruise-control gains cannot be negative."
+            );
+        }
+    }
+
+    if (
+        scenario.adaptiveCruiseControlEnabled
+    ) {
+        if (
+            scenario.leadVehicleInitialDistance <= 0.0
+        ) {
+            throw std::runtime_error(
+                "ACC leadVehicleInitialDistance "
+                "must be greater than zero."
             );
         }
 
 
         if (
-            scenario.minimumAcceleration
-            >=
-            scenario.maximumAcceleration
+            scenario.leadVehicleInitialVelocity < 0.0
         ) {
             throw std::runtime_error(
-                "minimumAcceleration must be smaller "
-                "than maximumAcceleration."
+                "ACC leadVehicleInitialVelocity "
+                "cannot be negative."
+            );
+        }
+
+
+        if (
+            scenario.leadVehicleBrakeStart < 0.0
+        ) {
+            throw std::runtime_error(
+                "ACC leadVehicleBrakeStart "
+                "cannot be negative."
+            );
+        }
+
+
+        if (
+            scenario.leadVehicleBrakeEnd
+            <=
+            scenario.leadVehicleBrakeStart
+        ) {
+            throw std::runtime_error(
+                "ACC leadVehicleBrakeEnd must be "
+                "greater than leadVehicleBrakeStart."
+            );
+        }
+
+
+        if (
+            scenario.leadVehicleBrakeEnd
+            >
+            scenario.duration
+        ) {
+            throw std::runtime_error(
+                "ACC lead-vehicle braking event "
+                "cannot extend past scenario duration."
+            );
+        }
+
+
+        if (
+            scenario.desiredTimeHeadway <= 0.0
+        ) {
+            throw std::runtime_error(
+                "ACC desiredTimeHeadway "
+                "must be greater than zero."
+            );
+        }
+
+
+        if (
+            scenario.minimumFollowingDistance <= 0.0
+        ) {
+            throw std::runtime_error(
+                "ACC minimumFollowingDistance "
+                "must be greater than zero."
+            );
+        }
+
+
+        if (
+            scenario.accGapKp < 0.0
+            ||
+            scenario.accRelativeVelocityKp < 0.0
+        ) {
+            throw std::runtime_error(
+                "ACC controller gains cannot be negative."
             );
         }
     }
@@ -326,20 +539,24 @@ Scenario loadScenario(
     std::cout
         << "\n[Scenario Loader]\n";
 
+
     std::cout
         << "File: "
         << filePath
         << "\n";
+
 
     std::cout
         << "Name: "
         << scenario.name
         << "\n";
 
+
     std::cout
         << "Initial velocity: "
         << scenario.initialVelocity
         << "\n";
+
 
     std::cout
         << "Cruise enabled: "
@@ -350,24 +567,75 @@ Scenario loadScenario(
         )
         << "\n";
 
+
     std::cout
-        << "Target velocity: "
-        << scenario.targetVelocity
+        << "ACC enabled: "
+        << (
+            scenario.adaptiveCruiseControlEnabled
+            ? "true"
+            : "false"
+        )
         << "\n";
 
 
     if (
         scenario.cruiseControlEnabled
     ) {
+        std::cout
+            << "Target velocity: "
+            << scenario.targetVelocity
+            << "\n";
+
 
         std::cout
             << "Kp: "
             << scenario.cruiseKp
             << "\n";
 
+
         std::cout
             << "Ki: "
             << scenario.cruiseKi
+            << "\n";
+    }
+
+
+    if (
+        scenario.adaptiveCruiseControlEnabled
+    ) {
+        std::cout
+            << "Lead initial distance: "
+            << scenario.leadVehicleInitialDistance
+            << "\n";
+
+
+        std::cout
+            << "Lead initial velocity: "
+            << scenario.leadVehicleInitialVelocity
+            << "\n";
+
+
+        std::cout
+            << "Desired headway: "
+            << scenario.desiredTimeHeadway
+            << "\n";
+
+
+        std::cout
+            << "Minimum following distance: "
+            << scenario.minimumFollowingDistance
+            << "\n";
+
+
+        std::cout
+            << "ACC gap Kp: "
+            << scenario.accGapKp
+            << "\n";
+
+
+        std::cout
+            << "ACC relative velocity Kp: "
+            << scenario.accRelativeVelocityKp
             << "\n";
     }
 

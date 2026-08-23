@@ -27,19 +27,29 @@ struct Scenario {
     std::vector<SteeringEvent> steeringSchedule;
 
 
-    // ==================================================
-    // Optional cruise-control configuration
-    // ==================================================
-
     bool cruiseControlEnabled;
 
     double targetVelocity;
 
     double cruiseKp;
-
     double cruiseKi;
 
     double minimumAcceleration;
-
     double maximumAcceleration;
+
+    bool adaptiveCruiseControlEnabled;
+
+    double leadVehicleInitialDistance;
+
+    double leadVehicleInitialVelocity;
+
+    double leadVehicleBrakeStart;
+    double leadVehicleBrakeEnd;
+    double leadVehicleBrakeAcceleration;
+
+    double desiredTimeHeadway;
+    double minimumFollowingDistance;
+
+    double accGapKp;
+    double accRelativeVelocityKp;
 };

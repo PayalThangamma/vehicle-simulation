@@ -1,0 +1,34 @@
+{
+  "name": "Adaptive Cruise Control - Lead Vehicle Braking",
+  "outputFile": "results/adaptive_cruise_control.csv",
+
+  "initialVelocity": 15.0,
+  "acceleration": 0.0,
+  "steeringAngle": 0.0,
+  "wheelbase": 2.7,
+
+  "duration": 15.0,
+  "dt": 0.1,
+
+  "integrationMethod": "RK4",
+
+  "cruiseControlEnabled": false,
+
+  "adaptiveCruiseControlEnabled": true,
+
+  "leadVehicleInitialDistance": 35.0,
+  "leadVehicleInitialVelocity": 20.0,
+
+  "leadVehicleBrakeStart": 4.0,
+  "leadVehicleBrakeEnd": 6.0,
+  "leadVehicleBrakeAcceleration": -4.0,
+
+  "desiredTimeHeadway": 1.5,
+  "minimumFollowingDistance": 5.0,
+
+  "accGapKp": 0.35,
+  "accRelativeVelocityKp": 0.8,
+
+  "minimumAcceleration": -5.0,
+  "maximumAcceleration": 3.0
+}
