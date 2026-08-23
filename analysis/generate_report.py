@@ -4,940 +4,972 @@ import pandas as pd
 
 
 RESULTS_DIR = Path("results")
-
-REPORT_FILE = (
-    RESULTS_DIR
-    / "simulation_report.md"
-)
+REPORT_PATH = RESULTS_DIR / "simulation_report.md"
 
 
-def read_csv_if_exists(
-    path
-):
-    if path.exists():
-        return pd.read_csv(
-            path
+def safe_read_csv(path: Path):
+    if not path.exists():
+        return None
+
+    try:
+        return pd.read_csv(path)
+    except Exception:
+        return None
+
+
+def yes_no(value: bool) -> str:
+    return "PASS" if value else "FAIL"
+
+
+def main():
+    RESULTS_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    report_lines = []
+
+    report_lines.append(
+        "# Simulation Factory Validation Report"
+    )
+
+    report_lines.append("")
+    report_lines.append(
+        "Automated summary of simulation, controller, numerical, "
+        "and regression-validation results."
+    )
+
+    report_lines.append("")
+    report_lines.append("---")
+    report_lines.append("")
+
+    cruise_path = (
+        RESULTS_DIR
+        / "cruise_control.csv"
+    )
+
+    cruise = safe_read_csv(
+        cruise_path
+    )
+
+    cruise_pass = False
+
+    cruise_metrics = {}
+
+    if (
+        cruise is not None
+        and
+        not cruise.empty
+        and
+        {
+            "time",
+            "velocity",
+            "target_velocity",
+            "speed_error",
+        }.issubset(cruise.columns)
+    ):
+        target_velocity = float(
+            cruise["target_velocity"].iloc[-1]
         )
 
-    return None
+        final_velocity = float(
+            cruise["velocity"].iloc[-1]
+        )
 
+        maximum_velocity = float(
+            cruise["velocity"].max()
+        )
 
-def add_overview_section(
-    lines
-):
-    lines.append(
-        "# Vehicle Simulation Factory Report"
+        final_error = abs(
+            target_velocity
+            -
+            final_velocity
+        )
+
+        overshoot = 0.0
+
+        if target_velocity > 0.0:
+            overshoot = max(
+                0.0,
+                (
+                    maximum_velocity
+                    -
+                    target_velocity
+                )
+                /
+                target_velocity
+                *
+                100.0,
+            )
+
+        steady_state_window = cruise.tail(
+            min(
+                20,
+                len(cruise),
+            )
+        )
+
+        steady_state_error = float(
+            steady_state_window[
+                "speed_error"
+            ].abs().mean()
+        )
+
+        cruise_pass = (
+            final_error <= 0.5
+            and
+            overshoot <= 5.0
+            and
+            steady_state_error <= 0.5
+        )
+
+        cruise_metrics = {
+            "target_velocity":
+                target_velocity,
+
+            "final_velocity":
+                final_velocity,
+
+            "maximum_velocity":
+                maximum_velocity,
+
+            "final_error":
+                final_error,
+
+            "overshoot":
+                overshoot,
+
+            "steady_state_error":
+                steady_state_error,
+        }
+
+    acc_path = (
+        RESULTS_DIR
+        / "adaptive_cruise_control.csv"
     )
 
-    lines.append("")
-
-    lines.append(
-        "## Overview"
+    acc = safe_read_csv(
+        acc_path
     )
 
-    lines.append("")
+    acc_pass = False
 
-    lines.append(
-        "This project implements a configurable "
-        "vehicle simulation and automated validation "
-        "pipeline using C++, CMake and Python."
-    )
+    acc_metrics = {}
 
-    lines.append("")
+    if (
+        acc is not None
+        and
+        not acc.empty
+        and
+        {
+            "velocity",
+            "commanded_acceleration",
+            "lead_vehicle_velocity",
+            "lead_vehicle_acceleration",
+            "actual_gap",
+            "desired_gap",
+            "gap_error",
+            "relative_velocity",
+        }.issubset(acc.columns)
+    ):
+        minimum_gap = float(
+            acc["actual_gap"].min()
+        )
 
-    lines.append(
-        "The simulation engine uses a simplified "
-        "kinematic bicycle model and supports "
-        "acceleration, emergency braking, constant-turn "
-        "and lane-change scenarios."
-    )
+        final_gap = float(
+            acc["actual_gap"].iloc[-1]
+        )
 
-    lines.append("")
+        final_desired_gap = float(
+            acc["desired_gap"].iloc[-1]
+        )
 
-    lines.append(
-        "Both explicit Euler and fourth-order "
-        "Runge-Kutta (RK4) numerical integration "
-        "methods are supported."
-    )
+        final_gap_error = float(
+            acc["gap_error"].iloc[-1]
+        )
 
-    lines.append("")
+        final_relative_velocity = float(
+            acc["relative_velocity"].iloc[-1]
+        )
 
+        minimum_acceleration = float(
+            acc[
+                "commanded_acceleration"
+            ].min()
+        )
 
-def add_architecture_section(
-    lines
-):
-    lines.append(
-        "## Simulation Architecture"
-    )
+        maximum_acceleration = float(
+            acc[
+                "commanded_acceleration"
+            ].max()
+        )
 
-    lines.append("")
+        lead_braked = bool(
+            (
+                acc[
+                    "lead_vehicle_acceleration"
+                ]
+                <
+                0.0
+            ).any()
+        )
 
-    lines.append("```text")
+        ego_braked = bool(
+            minimum_acceleration
+            <
+            -0.1
+        )
 
-    lines.append(
-        "JSON Scenario Configuration"
-    )
+        collision_avoided = (
+            minimum_gap > 0.0
+        )
 
-    lines.append(
-        "            |"
-    )
+        safe_gap = (
+            minimum_gap >= 5.0
+        )
 
-    lines.append(
-        "            v"
-    )
+        final_relative_speed_ok = (
+            abs(
+                final_relative_velocity
+            )
+            <=
+            0.5
+        )
 
-    lines.append(
-        "C++ Scenario Loader"
-    )
+        final_gap_error_ok = (
+            abs(
+                final_gap_error
+            )
+            <=
+            5.0
+        )
 
-    lines.append(
-        "            |"
-    )
+        acc_pass = all(
+            [
+                lead_braked,
+                ego_braked,
+                collision_avoided,
+                safe_gap,
+                final_relative_speed_ok,
+                final_gap_error_ok,
+            ]
+        )
 
-    lines.append(
-        "            v"
-    )
+        acc_metrics = {
+            "minimum_gap":
+                minimum_gap,
 
-    lines.append(
-        "C++ Simulation Engine"
-    )
+            "final_gap":
+                final_gap,
 
-    lines.append(
-        "            |"
-    )
+            "final_desired_gap":
+                final_desired_gap,
 
-    lines.append(
-        "            v"
-    )
+            "final_gap_error":
+                final_gap_error,
 
-    lines.append(
-        "Kinematic Bicycle Model"
-    )
+            "final_relative_velocity":
+                final_relative_velocity,
 
-    lines.append(
-        "            |"
-    )
+            "minimum_acceleration":
+                minimum_acceleration,
 
-    lines.append(
-        "            v"
-    )
+            "maximum_acceleration":
+                maximum_acceleration,
+        }
 
-    lines.append(
-        "Euler / RK4 Integration"
-    )
-
-    lines.append(
-        "            |"
-    )
-
-    lines.append(
-        "            v"
-    )
-
-    lines.append(
-        "CSV Simulation Logs"
-    )
-
-    lines.append(
-        "            |"
-    )
-
-    lines.append(
-        "            v"
-    )
-
-    lines.append(
-        "Python Reprocessing"
-    )
-
-    lines.append(
-        "            |"
-    )
-
-    lines.append(
-        "            v"
-    )
-
-    lines.append(
-        "Validation / Sweeps / Regression"
-    )
-
-    lines.append(
-        "            |"
-    )
-
-    lines.append(
-        "            v"
-    )
-
-    lines.append(
-        "Plots + Automated Report"
-    )
-
-    lines.append("```")
-
-    lines.append("")
-
-
-def add_validation_section(
-    lines
-):
-    lines.append(
-        "## Validation Strategy"
-    )
-
-    lines.append("")
-
-    lines.append(
-        "- C++ unit tests validate individual "
-        "vehicle-model behavior."
-    )
-
-    lines.append(
-        "- Scenario-level validation checks "
-        "acceleration, braking, turning and "
-        "lane-change behavior."
-    )
-
-    lines.append(
-        "- Parameter sweeps test the vehicle model "
-        "across multiple speeds and steering commands."
-    )
-
-    lines.append(
-        "- Regression tests compare current outputs "
-        "against known-good baselines."
-    )
-
-    lines.append(
-        "- Euler/RK4 comparisons evaluate numerical "
-        "integration behavior."
-    )
-
-    lines.append(
-        "- Timestep sensitivity analysis evaluates "
-        "numerical convergence."
-    )
-
-    lines.append(
-        "- Multi-configuration Euler/RK4 sweeps compare "
-        "integration accuracy across the scenario matrix."
-    )
-
-    lines.append("")
-
-
-def add_turn_sweep_section(
-    lines
-):
-    lines.append(
-        "## Turn Sweep Results"
-    )
-
-    lines.append("")
-
-    sweep_file = (
+    sweep_path = (
         RESULTS_DIR
         / "turn_sweep_summary.csv"
     )
 
-    sweep = read_csv_if_exists(
-        sweep_file
+    sweep = safe_read_csv(
+        sweep_path
     )
 
+    sweep_pass = False
 
-    if sweep is None:
+    sweep_total = 0
+    sweep_passed = 0
+    sweep_failed = 0
 
-        lines.append(
-            "Turn sweep summary not found."
-        )
-
-        lines.append("")
-
-        return
-
-
-    total = len(
-        sweep
-    )
-
-
-    if "result" in sweep.columns:
-
-        passed = int(
-            (
-                sweep["result"]
-                ==
-                "PASS"
-            ).sum()
-        )
-
-        failed = int(
-            (
-                sweep["result"]
-                ==
-                "FAIL"
-            ).sum()
-        )
-
-
-        lines.append(
-            f"- Total runs: {total}"
-        )
-
-        lines.append(
-            f"- Passed: {passed}"
-        )
-
-        lines.append(
-            f"- Failed: {failed}"
-        )
-
-        lines.append("")
-
-
-    required_columns = [
-        "integration_method",
-        "initial_velocity_mps",
-        "steering_angle_rad",
-        "expected_radius_m",
-        "measured_radius_m",
-        "radius_error_m",
-        "result",
-    ]
-
-
-    if all(
-        column in sweep.columns
-        for column in required_columns
+    if (
+        sweep is not None
+        and
+        not sweep.empty
     ):
-
-        lines.append(
-            "| Method | Velocity (m/s) | "
-            "Steering (rad) | Expected Radius (m) | "
-            "Measured Radius (m) | Error (m) | Result |"
+        sweep_total = len(
+            sweep
         )
 
-        lines.append(
-            "|:---|---:|---:|---:|---:|---:|:---:|"
-        )
-
-
-        for _, row in sweep.iterrows():
-
-            lines.append(
-                f"| {row['integration_method']} "
-                f"| {row['initial_velocity_mps']:.2f} "
-                f"| {row['steering_angle_rad']:.3f} "
-                f"| {row['expected_radius_m']:.2f} "
-                f"| {row['measured_radius_m']:.2f} "
-                f"| {row['radius_error_m']:.4f} "
-                f"| {row['result']} |"
+        if "result" in sweep.columns:
+            normalized_result = (
+                sweep["result"]
+                .astype(str)
+                .str.upper()
             )
 
+            sweep_passed = int(
+                (
+                    normalized_result
+                    ==
+                    "PASS"
+                ).sum()
+            )
 
-    lines.append("")
+            sweep_failed = (
+                sweep_total
+                -
+                sweep_passed
+            )
 
+            sweep_pass = (
+                sweep_total > 0
+                and
+                sweep_failed == 0
+            )
 
-def add_integration_sweep_section(
-    lines
-):
-    lines.append(
-        "## Euler vs RK4 Parameter Sweep"
-    )
+        elif "passed" in sweep.columns:
+            passed_values = (
+                sweep["passed"]
+                .astype(str)
+                .str.lower()
+                .isin(
+                    [
+                        "true",
+                        "1",
+                        "yes",
+                        "pass",
+                    ]
+                )
+            )
 
-    lines.append("")
+            sweep_passed = int(
+                passed_values.sum()
+            )
 
-    comparison_file = (
+            sweep_failed = (
+                sweep_total
+                -
+                sweep_passed
+            )
+
+            sweep_pass = (
+                sweep_total > 0
+                and
+                sweep_failed == 0
+            )
+
+    integration_path = (
         RESULTS_DIR
         / "integration_method_comparison.csv"
     )
 
-
-    comparison = read_csv_if_exists(
-        comparison_file
+    integration = safe_read_csv(
+        integration_path
     )
 
-
-    if comparison is None:
-
-        lines.append(
-            "Euler/RK4 integration comparison "
-            "results were not found."
-        )
-
-        lines.append("")
-
-        return
-
-
-    required_columns = [
-        "initial_velocity_mps",
-        "steering_angle_rad",
-        "euler_radius_error_m",
-        "rk4_radius_error_m",
-        "final_position_difference_m",
-        "heading_difference_rad",
-        "more_accurate_method",
-    ]
-
-
-    if not all(
-        column in comparison.columns
-        for column in required_columns
-    ):
-
-        lines.append(
-            "Integration comparison file does not "
-            "contain all required columns."
-        )
-
-        lines.append("")
-
-        return
-
-
-    lines.append(
-        "Euler and RK4 were executed using identical "
-        "vehicle configurations so that differences "
-        "were caused only by the numerical integration "
-        "method."
-    )
-
-    lines.append("")
-
-
-    mean_euler_error = (
-        comparison[
-            "euler_radius_error_m"
-        ]
-        .mean()
-    )
-
-
-    mean_rk4_error = (
-        comparison[
-            "rk4_radius_error_m"
-        ]
-        .mean()
-    )
-
-
-    mean_position_difference = (
-        comparison[
-            "final_position_difference_m"
-        ]
-        .mean()
-    )
-
-
-    maximum_position_difference = (
-        comparison[
-            "final_position_difference_m"
-        ]
-        .max()
-    )
-
-
-    lines.append(
-        f"- Mean Euler turning-radius error: "
-        f"{mean_euler_error:.6f} m"
-    )
-
-    lines.append(
-        f"- Mean RK4 turning-radius error: "
-        f"{mean_rk4_error:.6f} m"
-    )
-
-    lines.append(
-        f"- Mean Euler/RK4 final-position difference: "
-        f"{mean_position_difference:.6f} m"
-    )
-
-    lines.append(
-        f"- Maximum Euler/RK4 final-position difference: "
-        f"{maximum_position_difference:.6f} m"
-    )
-
-    lines.append("")
-
+    integration_metrics = {}
 
     if (
-        mean_rk4_error
-        <
-        mean_euler_error
+        integration is not None
+        and
+        not integration.empty
     ):
+        if (
+            "position_difference"
+            in
+            integration.columns
+        ):
+            integration_metrics[
+                "mean_position_difference"
+            ] = float(
+                integration[
+                    "position_difference"
+                ].mean()
+            )
 
-        lines.append(
-            "**Overall result:** RK4 produced a lower "
-            "average turning-radius error than Euler."
-        )
+            integration_metrics[
+                "max_position_difference"
+            ] = float(
+                integration[
+                    "position_difference"
+                ].max()
+            )
 
+        possible_euler_columns = [
+            "euler_radius_error",
+            "Euler_radius_error",
+            "euler_error",
+        ]
 
-    elif (
-        mean_euler_error
-        <
-        mean_rk4_error
-    ):
+        possible_rk4_columns = [
+            "rk4_radius_error",
+            "RK4_radius_error",
+            "rk4_error",
+        ]
 
-        lines.append(
-            "**Overall result:** Euler produced a lower "
-            "average turning-radius error than RK4."
-        )
+        for column in possible_euler_columns:
+            if column in integration.columns:
+                integration_metrics[
+                    "mean_euler_radius_error"
+                ] = float(
+                    integration[
+                        column
+                    ].mean()
+                )
 
+                break
 
-    else:
+        for column in possible_rk4_columns:
+            if column in integration.columns:
+                integration_metrics[
+                    "mean_rk4_radius_error"
+                ] = float(
+                    integration[
+                        column
+                    ].mean()
+                )
 
-        lines.append(
-            "**Overall result:** Euler and RK4 produced "
-            "equal average turning-radius error."
-        )
+                break
 
-
-    lines.append("")
-
-
-    lines.append(
-        "| Velocity (m/s) | Steering (rad) | "
-        "Euler Radius Error (m) | "
-        "RK4 Radius Error (m) | "
-        "Position Difference (m) | "
-        "Heading Difference (rad) | "
-        "More Accurate |"
-    )
-
-    lines.append(
-        "|---:|---:|---:|---:|---:|---:|:---:|"
-    )
-
-
-    for _, row in comparison.iterrows():
-
-        lines.append(
-            f"| {row['initial_velocity_mps']:.2f} "
-            f"| {row['steering_angle_rad']:.3f} "
-            f"| {row['euler_radius_error_m']:.6f} "
-            f"| {row['rk4_radius_error_m']:.6f} "
-            f"| {row['final_position_difference_m']:.6f} "
-            f"| {row['heading_difference_rad']:.6f} "
-            f"| {row['more_accurate_method']} |"
-        )
-
-
-    lines.append("")
-
-
-    position_plot = (
-        RESULTS_DIR
-        / "euler_rk4_position_difference.png"
-    )
-
-
-    if position_plot.exists():
-
-        lines.append(
-            "### Final Position Difference"
-        )
-
-        lines.append("")
-
-        lines.append(
-            "![Euler vs RK4 Position Difference]"
-            "(euler_rk4_position_difference.png)"
-        )
-
-        lines.append("")
-
-
-    radius_plot = (
-        RESULTS_DIR
-        / "euler_rk4_radius_error.png"
-    )
-
-
-    if radius_plot.exists():
-
-        lines.append(
-            "### Turning-Radius Accuracy"
-        )
-
-        lines.append("")
-
-        lines.append(
-            "![Euler vs RK4 Radius Error]"
-            "(euler_rk4_radius_error.png)"
-        )
-
-        lines.append("")
-
-
-def add_timestep_section(
-    lines
-):
-    lines.append(
-        "## Timestep Sensitivity and Numerical Convergence"
-    )
-
-    lines.append("")
-
-
-    sensitivity_file = (
+    timestep_path = (
         RESULTS_DIR
         / "timestep_sensitivity.csv"
     )
 
-
-    df = read_csv_if_exists(
-        sensitivity_file
+    timestep = safe_read_csv(
+        timestep_path
     )
 
+    convergence_pass = False
 
-    if df is None:
-
-        lines.append(
-            "Timestep sensitivity results "
-            "were not found."
-        )
-
-        lines.append("")
-
-        return
-
-
-    required_columns = [
-        "dt",
-        "euler_x",
-        "euler_y",
-        "rk4_x",
-        "rk4_y",
-        "position_error",
-        "heading_error",
-    ]
-
-
-    if not all(
-        column in df.columns
-        for column in required_columns
-    ):
-
-        lines.append(
-            "Timestep sensitivity file does not "
-            "contain all required columns."
-        )
-
-        lines.append("")
-
-        return
-
-
-    lines.append(
-        "The same turning scenario was simulated "
-        "using progressively smaller timesteps."
-    )
-
-    lines.append("")
-
-    lines.append(
-        "| dt (s) | Euler X | Euler Y | "
-        "RK4 X | RK4 Y | "
-        "Position Difference (m) | "
-        "Heading Difference (rad) |"
-    )
-
-    lines.append(
-        "|---:|---:|---:|---:|---:|---:|---:|"
-    )
-
-
-    for _, row in df.iterrows():
-
-        lines.append(
-            f"| {row['dt']:.3f} "
-            f"| {row['euler_x']:.5f} "
-            f"| {row['euler_y']:.5f} "
-            f"| {row['rk4_x']:.5f} "
-            f"| {row['rk4_y']:.5f} "
-            f"| {row['position_error']:.6f} "
-            f"| {row['heading_error']:.6f} |"
-        )
-
-
-    lines.append("")
-
-
-    largest_dt_row = (
-        df.loc[
-            df["dt"].idxmax()
-        ]
-    )
-
-
-    smallest_dt_row = (
-        df.loc[
-            df["dt"].idxmin()
-        ]
-    )
-
-
-    large_error = (
-        largest_dt_row[
-            "position_error"
-        ]
-    )
-
-
-    small_error = (
-        smallest_dt_row[
-            "position_error"
-        ]
-    )
-
-
-    lines.append(
-        f"At dt = {largest_dt_row['dt']:.3f} s, "
-        f"the Euler/RK4 position difference was "
-        f"{large_error:.6f} m."
-    )
-
-    lines.append("")
-
-
-    lines.append(
-        f"At dt = {smallest_dt_row['dt']:.3f} s, "
-        f"the difference decreased to "
-        f"{small_error:.6f} m."
-    )
-
-    lines.append("")
-
+    convergence_metrics = {}
 
     if (
-        small_error
-        <
-        large_error
+        timestep is not None
+        and
+        not timestep.empty
+        and
+        {
+            "dt",
+            "position_difference",
+        }.issubset(timestep.columns)
     ):
+        timestep_sorted = (
+            timestep
+            .sort_values(
+                "dt",
+                ascending=False,
+            )
+            .reset_index(
+                drop=True
+            )
+        )
 
-        lines.append(
-            "**Convergence result:** decreasing the "
-            "simulation timestep reduced the difference "
-            "between Euler and RK4 trajectories."
+        errors = (
+            timestep_sorted[
+                "position_difference"
+            ]
+            .astype(float)
+            .tolist()
+        )
+
+        convergence_pass = all(
+            errors[index + 1]
+            <
+            errors[index]
+            for index in range(
+                len(errors) - 1
+            )
+        )
+
+        convergence_metrics = {
+            "coarsest_dt":
+                float(
+                    timestep_sorted[
+                        "dt"
+                    ].iloc[0]
+                ),
+
+            "coarsest_error":
+                float(
+                    timestep_sorted[
+                        "position_difference"
+                    ].iloc[0]
+                ),
+
+            "finest_dt":
+                float(
+                    timestep_sorted[
+                        "dt"
+                    ].iloc[-1]
+                ),
+
+            "finest_error":
+                float(
+                    timestep_sorted[
+                        "position_difference"
+                    ].iloc[-1]
+                ),
+        }
+
+
+    regression_candidates = [
+        RESULTS_DIR
+        / "regression_summary.csv",
+
+        RESULTS_DIR
+        / "regression_results.csv",
+    ]
+
+    regression = None
+
+    for candidate in regression_candidates:
+        regression = safe_read_csv(
+            candidate
+        )
+
+        if (
+            regression is not None
+            and
+            not regression.empty
+        ):
+            break
+
+    regression_pass = False
+    regression_total = 0
+    regression_passed = 0
+
+    if (
+        regression is not None
+        and
+        not regression.empty
+    ):
+        regression_total = len(
+            regression
+        )
+
+        if "result" in regression.columns:
+            regression_passed = int(
+                (
+                    regression[
+                        "result"
+                    ]
+                    .astype(str)
+                    .str.upper()
+                    ==
+                    "PASS"
+                ).sum()
+            )
+
+        elif "passed" in regression.columns:
+            regression_passed = int(
+                regression[
+                    "passed"
+                ]
+                .astype(str)
+                .str.lower()
+                .isin(
+                    [
+                        "true",
+                        "1",
+                        "yes",
+                        "pass",
+                    ]
+                )
+                .sum()
+            )
+
+        regression_pass = (
+            regression_total > 0
+            and
+            regression_passed
+            ==
+            regression_total
+        )
+
+    if regression_total == 0:
+        baseline_files = list(
+            Path(
+                "baselines"
+            ).glob(
+                "*_baseline.csv"
+            )
+        )
+
+        regression_total = len(
+            baseline_files
+        )
+
+        regression_passed = 0
+
+    report_lines.append(
+        "## Validation Summary"
+    )
+
+    report_lines.append("")
+
+    report_lines.append(
+        "| Validation | Result |"
+    )
+
+    report_lines.append(
+        "|---|---:|"
+    )
+
+    report_lines.append(
+        f"| Cruise Control | {yes_no(cruise_pass)} |"
+    )
+
+    report_lines.append(
+        f"| Adaptive Cruise Control | {yes_no(acc_pass)} |"
+    )
+
+    report_lines.append(
+        f"| Turn Sweep | "
+        f"{sweep_passed} / {sweep_total} "
+        f"{yes_no(sweep_pass)} |"
+    )
+
+    if regression_total > 0:
+        regression_text = (
+            f"{regression_passed} / "
+            f"{regression_total} "
+            f"{yes_no(regression_pass)}"
+        )
+    else:
+        regression_text = "NOT AVAILABLE"
+
+    report_lines.append(
+        f"| Regression | {regression_text} |"
+    )
+
+    report_lines.append(
+        f"| Numerical Convergence | "
+        f"{yes_no(convergence_pass)} |"
+    )
+
+    report_lines.append("")
+
+    report_lines.append(
+        "## Cruise Control"
+    )
+
+    report_lines.append("")
+
+    if cruise_metrics:
+        report_lines.append(
+            "| Metric | Value |"
+        )
+
+        report_lines.append(
+            "|---|---:|"
+        )
+
+        report_lines.append(
+            "| Target velocity | "
+            f"{cruise_metrics['target_velocity']:.3f} m/s |"
+        )
+
+        report_lines.append(
+            "| Final velocity | "
+            f"{cruise_metrics['final_velocity']:.3f} m/s |"
+        )
+
+        report_lines.append(
+            "| Maximum velocity | "
+            f"{cruise_metrics['maximum_velocity']:.3f} m/s |"
+        )
+
+        report_lines.append(
+            "| Final speed error | "
+            f"{cruise_metrics['final_error']:.3f} m/s |"
+        )
+
+        report_lines.append(
+            "| Overshoot | "
+            f"{cruise_metrics['overshoot']:.3f}% |"
+        )
+
+        report_lines.append(
+            "| Steady-state error | "
+            f"{cruise_metrics['steady_state_error']:.3f} m/s |"
         )
 
     else:
-
-        lines.append(
-            "**Convergence result:** the expected "
-            "decreasing-error trend was not observed."
+        report_lines.append(
+            "Cruise-control results were not available."
         )
 
+    report_lines.append("")
 
-    lines.append("")
-
-
-    convergence_plot = (
-        RESULTS_DIR
-        / "timestep_convergence.png"
+    report_lines.append(
+        "## Adaptive Cruise Control"
     )
 
+    report_lines.append("")
 
-    if convergence_plot.exists():
-
-        lines.append(
-            "### Timestep Convergence Plot"
+    if acc_metrics:
+        report_lines.append(
+            "| Metric | Value |"
         )
 
-        lines.append("")
-
-        lines.append(
-            "![Timestep Convergence]"
-            "(timestep_convergence.png)"
+        report_lines.append(
+            "|---|---:|"
         )
 
-        lines.append("")
+        report_lines.append(
+            "| Minimum following gap | "
+            f"{acc_metrics['minimum_gap']:.4f} m |"
+        )
 
+        report_lines.append(
+            "| Final gap | "
+            f"{acc_metrics['final_gap']:.4f} m |"
+        )
 
-def add_trajectory_section(
-    lines
-):
-    lines.append(
-        "## Scenario Trajectories"
+        report_lines.append(
+            "| Final desired gap | "
+            f"{acc_metrics['final_desired_gap']:.4f} m |"
+        )
+
+        report_lines.append(
+            "| Final gap error | "
+            f"{acc_metrics['final_gap_error']:.4f} m |"
+        )
+
+        report_lines.append(
+            "| Final relative velocity | "
+            f"{acc_metrics['final_relative_velocity']:.4f} m/s |"
+        )
+
+        report_lines.append(
+            "| Minimum ego acceleration | "
+            f"{acc_metrics['minimum_acceleration']:.4f} m/s^2 |"
+        )
+
+        report_lines.append(
+            "| Maximum ego acceleration | "
+            f"{acc_metrics['maximum_acceleration']:.4f} m/s^2 |"
+        )
+
+        report_lines.append("")
+        report_lines.append(
+            f"Collision avoided: **"
+            f"{'YES' if acc_metrics['minimum_gap'] > 0.0 else 'NO'}"
+            f"**"
+        )
+
+    else:
+        report_lines.append(
+            "Adaptive Cruise Control results were not available."
+        )
+
+    report_lines.append("")
+
+    report_lines.append(
+        "## Numerical Integration"
     )
 
-    lines.append("")
+    report_lines.append("")
 
-
-    plots = sorted(
-        RESULTS_DIR.glob(
-            "*_trajectory.png"
-        )
-    )
-
-
-    if not plots:
-
-        lines.append(
-            "No trajectory plots were found."
+    if integration_metrics:
+        report_lines.append(
+            "| Metric | Value |"
         )
 
-        lines.append("")
+        report_lines.append(
+            "|---|---:|"
+        )
 
-        return
-
-
-    for plot in plots:
-
-        scenario_name = (
-            plot.stem
-            .replace(
-                "_trajectory",
-                ""
+        if (
+            "mean_position_difference"
+            in
+            integration_metrics
+        ):
+            report_lines.append(
+                "| Mean Euler/RK4 final-position difference | "
+                f"{integration_metrics['mean_position_difference']:.6f} m |"
             )
-            .replace(
-                "_",
-                " "
+
+        if (
+            "max_position_difference"
+            in
+            integration_metrics
+        ):
+            report_lines.append(
+                "| Maximum Euler/RK4 final-position difference | "
+                f"{integration_metrics['max_position_difference']:.6f} m |"
             )
-            .title()
+
+        if (
+            "mean_euler_radius_error"
+            in
+            integration_metrics
+        ):
+            report_lines.append(
+                "| Mean Euler turning-radius error | "
+                f"{integration_metrics['mean_euler_radius_error']:.6f} m |"
+            )
+
+        if (
+            "mean_rk4_radius_error"
+            in
+            integration_metrics
+        ):
+            report_lines.append(
+                "| Mean RK4 turning-radius error | "
+                f"{integration_metrics['mean_rk4_radius_error']:.6f} m |"
+            )
+
+    else:
+        report_lines.append(
+            "Integration comparison results were not available."
         )
 
+    report_lines.append("")
 
-        lines.append(
-            f"### {scenario_name}"
+    report_lines.append(
+        "## Timestep Convergence"
+    )
+
+    report_lines.append("")
+
+    if convergence_metrics:
+        report_lines.append(
+            "| Metric | Value |"
         )
 
-        lines.append("")
-
-        lines.append(
-            f"![{scenario_name}]"
-            f"({plot.name})"
+        report_lines.append(
+            "|---|---:|"
         )
 
-        lines.append("")
+        report_lines.append(
+            "| Coarsest timestep | "
+            f"{convergence_metrics['coarsest_dt']:.3f} s |"
+        )
 
+        report_lines.append(
+            "| Coarsest error | "
+            f"{convergence_metrics['coarsest_error']:.6f} m |"
+        )
 
-def add_project_summary(
-    lines
-):
-    lines.append(
-        "## Project Capabilities"
+        report_lines.append(
+            "| Finest timestep | "
+            f"{convergence_metrics['finest_dt']:.3f} s |"
+        )
+
+        report_lines.append(
+            "| Finest error | "
+            f"{convergence_metrics['finest_error']:.6f} m |"
+        )
+
+        report_lines.append("")
+        report_lines.append(
+            "Convergence result: "
+            f"**{yes_no(convergence_pass)}**"
+        )
+
+    else:
+        report_lines.append(
+            "Timestep-sensitivity results were not available."
+        )
+
+    report_lines.append("")
+
+    core_results = [
+        cruise_pass,
+        acc_pass,
+        sweep_pass,
+        convergence_pass,
+    ]
+
+    overall_pass = all(
+        core_results
     )
 
-    lines.append("")
-
-    lines.append(
-        "The completed framework demonstrates:"
+    report_lines.append(
+        "---"
     )
 
-    lines.append("")
+    report_lines.append("")
 
-    lines.append(
-        "- Scenario-driven C++ vehicle simulation."
+    report_lines.append(
+        "## Overall Result"
     )
 
-    lines.append(
-        "- Kinematic bicycle vehicle dynamics."
+    report_lines.append("")
+
+    report_lines.append(
+        f"**SIMULATION FACTORY RESULT: "
+        f"{yes_no(overall_pass)}**"
     )
 
-    lines.append(
-        "- Euler and RK4 numerical integration."
-    )
+    report_lines.append("")
 
-    lines.append(
-        "- Configurable integration method through JSON."
-    )
-
-    lines.append(
-        "- Automated Python reprocessing and validation."
-    )
-
-    lines.append(
-        "- Parameter-sweep generation and execution."
-    )
-
-    lines.append(
-        "- Euler-vs-RK4 comparative experiments."
-    )
-
-    lines.append(
-        "- Timestep-convergence analysis."
-    )
-
-    lines.append(
-        "- Regression testing against known-good baselines."
-    )
-
-    lines.append(
-        "- CMake and CTest-based build/test automation."
-    )
-
-    lines.append(
-        "- One-command PowerShell execution pipeline."
-    )
-
-    lines.append("")
-
-
-def build_report():
-    RESULTS_DIR.mkdir(
-        exist_ok=True
-    )
-
-
-    lines = []
-
-
-    add_overview_section(
-        lines
-    )
-
-
-    add_architecture_section(
-        lines
-    )
-
-
-    add_validation_section(
-        lines
-    )
-
-
-    add_turn_sweep_section(
-        lines
-    )
-
-
-    add_integration_sweep_section(
-        lines
-    )
-
-
-    add_timestep_section(
-        lines
-    )
-
-
-    add_trajectory_section(
-        lines
-    )
-
-
-    add_project_summary(
-        lines
-    )
-
-
-    REPORT_FILE.write_text(
+    REPORT_PATH.write_text(
         "\n".join(
-            lines
+            report_lines
         ),
-        encoding="utf-8"
+        encoding="utf-8",
     )
-
 
     print(
-        "Report generated:",
-        REPORT_FILE
+        "============================================"
+    )
+
+    print(
+        "Simulation Factory Report"
+    )
+
+    print(
+        "============================================"
+    )
+
+    print(
+        f"Cruise Control:            {yes_no(cruise_pass)}"
+    )
+
+    print(
+        f"Adaptive Cruise Control:   {yes_no(acc_pass)}"
+    )
+
+    print(
+        f"Turn Sweep:                "
+        f"{sweep_passed}/{sweep_total} "
+        f"{yes_no(sweep_pass)}"
+    )
+
+    print(
+        f"Numerical Convergence:     "
+        f"{yes_no(convergence_pass)}"
+    )
+
+    if regression_total > 0:
+        print(
+            f"Regression:                "
+            f"{regression_passed}/{regression_total} "
+            f"{yes_no(regression_pass)}"
+        )
+
+    print(
+        "============================================"
+    )
+
+    print(
+        f"Overall Result:             "
+        f"{yes_no(overall_pass)}"
+    )
+
+    print(
+        f"Report saved to: {REPORT_PATH}"
+    )
+
+    print(
+        "============================================"
     )
 
 
 if __name__ == "__main__":
-    build_report()
+    main()
