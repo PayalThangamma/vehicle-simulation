@@ -1,71 +1,134 @@
 # Vehicle Simulation & Automated Validation Framework
 
-A C++ and Python framework for vehicle dynamics simulation, numerical integration analysis, automated scenario execution, controller validation, regression testing, parameter sweeps, and simulation-data reprocessing.
+[![Vehicle Simulation CI](https://github.com/PayalThangamma/vehicle-simulation/actions/workflows/ci.yml/badge.svg)](https://github.com/PayalThangamma/vehicle-simulation/actions/workflows/ci.yml)
 
-This project is designed as a small-scale **Simulation Factory**: scenarios are defined in JSON, executed by a C++ vehicle simulator, validated automatically with Python, compared across numerical methods, and summarized through generated plots and reports.
+A C++ and Python vehicle simulation framework for scenario-based vehicle dynamics, closed-loop driving features, numerical-method comparison, automated validation, regression testing, visualization, and continuous integration.
+
+This project is structured as a small-scale **Simulation Factory**: scenarios are defined in JSON, executed by a C++ simulator, validated and reprocessed with Python, compared across numerical methods, and exercised automatically through GitHub Actions.
 
 ---
 
-## Project Overview
+## Highlights
 
-The framework implements a configurable vehicle simulation environment based on a kinematic bicycle model.
-
-It supports:
-
-- JSON-driven simulation scenarios
-- C++ vehicle dynamics simulation
-- Explicit Euler integration
-- Runge-Kutta 4th order integration
-- Straight-line acceleration
-- Emergency braking
-- Constant-radius turning
-- Lane-change steering profiles
-- PI cruise control
-- Actuator acceleration limits
-- PI anti-windup
-- Automated controller gain tuning
+- C++ kinematic bicycle simulation
+- Explicit Euler and RK4 integration
+- JSON-driven scenarios
+- PI cruise control with anti-windup
+- Adaptive Cruise Control with lead-vehicle braking
 - Automated parameter sweeps
-- Euler vs RK4 numerical comparison
-- Timestep sensitivity analysis
 - Numerical convergence analysis
-- Automated regression testing
-- Python-based result validation
-- Trajectory visualization
-- Automated report generation
-- One-command end-to-end execution
-
-The goal is to demonstrate how vehicle simulation models can be implemented, tested, validated, reprocessed, and executed repeatedly through an automated workflow.
+- Regression testing
+- Python post-processing and validation
+- Animated simulation replay
+- CMake and CTest
+- GitHub Actions CI
+- One-command local simulation pipeline
 
 ---
+
 ## Adaptive Cruise Control Demo
 
-The simulator includes an Adaptive Cruise Control scenario in which a lead vehicle performs a braking maneuver and the ego vehicle automatically adjusts its longitudinal acceleration while maintaining a safe following distance.
+The framework includes an Adaptive Cruise Control scenario in which a lead vehicle performs a braking maneuver and the ego vehicle automatically adjusts its longitudinal acceleration while maintaining a safe following distance.
 
 ![Adaptive Cruise Control simulation](docs/adaptive_cruise_control_demo.gif)
 
-## Simulation Demo
+### ACC Scenario
 
-The framework can replay generated simulation data as an animated vehicle trajectory with live telemetry.
+```text
+Initial ego speed        15 m/s
+Initial lead speed       20 m/s
+Initial gap              35 m
+
+Lead braking starts       4 s
+Lead braking ends         6 s
+Lead acceleration        -4 m/s^2
+
+Time headway              1.5 s
+Minimum following gap     5 m
+```
+
+The desired following distance is calculated as:
+
+```text
+desired_gap =
+    minimum_following_distance
+    + time_headway * ego_velocity
+```
+
+The ACC acceleration command uses spacing error and relative velocity:
+
+```text
+acceleration_command =
+    K_gap * gap_error
+    + K_relative_velocity * relative_velocity
+```
+
+The observed minimum following gap in the current ACC scenario is:
+
+```text
+21.5106 m
+```
+
+No collision occurred during the lead-vehicle braking maneuver.
+
+---
+
+## Additional Simulation Demo
+
+The same visualization tool can replay generated CSV results for other scenarios, including lane changes and cruise control.
 
 ![Vehicle simulation replay](docs/lane_change_demo.gif)
 
-## Results
+---
 
-### Cruise-Control Tracking
+## Validation Summary
 
-![Cruise-control tracking](docs/cruise_control_tracking.png)
+| Test | Result |
+|---|---:|
+| C++ build | PASS |
+| CTest unit tests | PASS |
+| Cruise-control validation | PASS |
+| Adaptive Cruise Control validation | PASS |
+| ACC collision avoidance | PASS |
+| Turn parameter sweep | 18 / 18 PASS |
+| Regression suite | 4 / 4 PASS |
+| Numerical convergence | PASS |
+| Euler vs RK4 analysis | PASS |
+| GitHub Actions CI | PASS |
 
-### Numerical Convergence
+---
 
-![Timestep convergence](docs/timestep_convergence.png)
+## Cruise-Control Performance
 
-### Euler vs RK4 Turning-Radius Error
+| Metric | Result |
+|---|---:|
+| Target velocity | 20.000 m/s |
+| Final velocity | 20.058 m/s |
+| Rise time | 4.100 s |
+| Settling time | 5.600 s |
+| Overshoot | 0.350% |
+| Final speed error | 0.058 m/s |
+| Steady-state error | 0.062 m/s |
+| Selected `Kp` | 1.2 |
+| Selected `Ki` | 0.05 |
 
-![Euler vs RK4 radius error](docs/euler_rk4_radius_error.png)
+---
 
-### Euler vs RK4 Final-Position Difference
+## Numerical Integration Results
 
-![Euler vs RK4 position difference](docs/euler_rk4_position_difference.png)
+| Metric | Euler | RK4 |
+|---|---:|---:|
+| Mean turning-radius error | 0.399356 m | 0.000002 m |
+
+Maximum observed final-position difference between Euler and RK4 across the turn sweep:
+
+```text
+1.945597 m
+```
+
+RK4 produced substantially lower turning-radius error for the tested curved-motion scenarios.
+
+---
 
 ## Architecture
 
@@ -94,9 +157,9 @@ The framework can replay generated simulation data as an animated vehicle trajec
                      |        C++           |
                      |----------------------|
                      | Kinematic bicycle    |
-                     | Euler                |
-                     | RK4                  |
+                     | Euler / RK4          |
                      | PI cruise control    |
+                     | ACC                  |
                      | Anti-windup          |
                      +----------+-----------+
                                 |
@@ -113,7 +176,8 @@ The framework can replay generated simulation data as an animated vehicle trajec
        |----------------------|     |----------------------|
        | scenario checks      |     | speed                |
        | controller metrics   |     | steering angle       |
-       | regression tests     |     | Euler / RK4          |
+       | ACC validation       |     | Euler / RK4          |
+       | regression tests     |     | timestep studies     |
        +----------+-----------+     +----------+-----------+
                   |                           |
                   +-------------+-------------+
@@ -122,11 +186,16 @@ The framework can replay generated simulation data as an animated vehicle trajec
                      +----------------------+
                      | Analysis & Reports   |
                      |----------------------|
-                     | trajectory plots     |
+                     | trajectory replay    |
                      | convergence plots    |
                      | controller plots     |
                      | sweep comparisons    |
-                     | Markdown report      |
+                     | Markdown reports     |
+                     +----------+-----------+
+                                |
+                                v
+                     +----------------------+
+                     | GitHub Actions CI    |
                      +----------------------+
 ```
 
@@ -196,12 +265,12 @@ Runge-Kutta 4th order integration evaluates four derivative estimates during eac
 
 Advantages:
 
-- Significantly higher numerical accuracy
+- Higher numerical accuracy
 - Better curved-trajectory accuracy
 - Much smaller turning-radius error
 - Better behavior at larger timesteps
 
-The integration method can be selected directly in a scenario JSON file:
+The integration method can be selected in a scenario JSON file:
 
 ```json
 {
@@ -247,28 +316,26 @@ x 2 integration methods
 = 18 simulation runs
 ```
 
-All 18 sweep runs passed validation.
+Current sweep result:
+
+```text
+Total runs: 18
+Passed: 18
+Failed: 0
+```
 
 Measured average turning-radius error:
 
 ```text
-Euler: approximately 0.399356 m
-RK4:   approximately 0.000002 m
+Euler: 0.399356 m
+RK4:   0.000002 m
 ```
-
-Maximum observed final-position difference between Euler and RK4:
-
-```text
-1.945597 m
-```
-
-These results demonstrate the higher trajectory accuracy of RK4 for curved vehicle motion.
 
 ---
 
 ## Timestep Sensitivity Analysis
 
-The framework evaluates numerical behavior using:
+The framework evaluates:
 
 ```text
 dt = 0.50 s
@@ -280,17 +347,19 @@ dt = 0.01 s
 
 Every experiment simulates the same physical duration.
 
-Corrected Euler/RK4 final-position differences:
+Measured Euler/RK4 final-position differences:
 
 ```text
-dt = 0.50 s  -> 4.007105 m
-dt = 0.20 s  -> 1.602196 m
-dt = 0.10 s  -> 0.801052 m
-dt = 0.05 s  -> 0.400520 m
-dt = 0.01 s  -> 0.080104 m
+dt = 0.50 s -> 4.007105 m
+dt = 0.20 s -> 1.602196 m
+dt = 0.10 s -> 0.801052 m
+dt = 0.05 s -> 0.400520 m
+dt = 0.01 s -> 0.080104 m
 ```
 
-As the timestep becomes smaller, Euler approaches the RK4 trajectory. This demonstrates numerical convergence and verifies that the simulation behaves consistently as temporal resolution increases.
+As the timestep becomes smaller, Euler approaches the RK4 trajectory, demonstrating numerical convergence.
+
+![Timestep convergence](docs/timestep_convergence.png)
 
 ---
 
@@ -298,7 +367,7 @@ As the timestep becomes smaller, Euler approaches the RK4 trajectory. This demon
 
 The simulator includes a closed-loop PI speed controller.
 
-The speed tracking error is:
+The speed error is:
 
 ```text
 speed_error = target_velocity - actual_velocity
@@ -312,11 +381,9 @@ acceleration_command =
     + Ki * integral(speed_error)
 ```
 
-The controller operates directly inside the simulation loop.
-
 ### Actuator Saturation
 
-The acceleration command is constrained to defined limits.
+The acceleration command is constrained before being passed to the vehicle model.
 
 Example:
 
@@ -325,13 +392,11 @@ Minimum acceleration: -4.0 m/s^2
 Maximum acceleration:  3.0 m/s^2
 ```
 
-The acceleration command is clamped before being passed to the vehicle model.
-
 ### Anti-Windup
 
-PI controllers can experience integral windup while actuator commands are saturated.
+The simulator implements **conditional-integration anti-windup**.
 
-The simulator implements **conditional-integration anti-windup**. Integral accumulation is prevented when it would push the controller further into saturation.
+Integral accumulation is prevented when it would push the controller further into actuator saturation.
 
 This improves:
 
@@ -340,22 +405,11 @@ This improves:
 - Controller recovery
 - Gain-tuning stability
 
----
+### Automated Controller Tuning
 
-## Automated Controller Tuning
+The project evaluates multiple `Kp` and `Ki` combinations.
 
-The project includes an automated PI gain sweep over multiple `Kp` and `Ki` combinations.
-
-For every configuration, the simulation measures:
-
-- Rise time
-- Settling time
-- Overshoot
-- Final speed error
-- Steady-state error
-- Controller acceleration effort
-
-Acceptance criteria:
+Acceptance criteria include:
 
 ```text
 Overshoot <= 5%
@@ -366,7 +420,7 @@ Vehicle must settle inside the 2% target band
 
 The tuning process evaluated 20 controller configurations.
 
-15 configurations satisfied all engineering requirements.
+15 configurations satisfied all requirements.
 
 Selected gains:
 
@@ -390,14 +444,61 @@ Final speed error:   0.058 m/s
 Steady-state error:  0.062 m/s
 ```
 
-Controller validation:
+![Cruise-control tracking](docs/cruise_control_tracking.png)
+
+---
+
+## Adaptive Cruise Control
+
+The ACC feature extends the longitudinal controller with a simulated lead vehicle.
+
+The controller uses:
+
+- Actual following gap
+- Desired following gap
+- Gap error
+- Relative velocity
+- Lead-vehicle acceleration
+- Configurable acceleration limits
+
+The desired gap is:
 
 ```text
-Final speed error <= 0.5 m/s: PASS
-Overshoot <= 5%: PASS
-Steady-state error <= 0.5 m/s: PASS
-Settled inside 2% band: PASS
+desired_gap =
+    minimumFollowingDistance
+    + desiredTimeHeadway * egoVelocity
 ```
+
+The relative velocity is:
+
+```text
+relative_velocity =
+    lead_velocity
+    - ego_velocity
+```
+
+The controller command is:
+
+```text
+acceleration =
+    accGapKp * gap_error
+    + accRelativeVelocityKp * relative_velocity
+```
+
+The command is then clamped to the configured acceleration limits.
+
+### ACC Validation
+
+The automated ACC validator checks:
+
+- Lead-vehicle braking was detected
+- Ego braking response occurred
+- Collision was avoided
+- Minimum gap stayed above the safety threshold
+- Ego velocity never became negative
+- Acceleration limits were respected
+- Final relative speed is small
+- Final gap tracking is reasonable
 
 ---
 
@@ -405,7 +506,7 @@ Settled inside 2% band: PASS
 
 Simulation behavior is defined through JSON configuration files.
 
-Example:
+### Cruise-Control Example
 
 ```json
 {
@@ -427,7 +528,36 @@ Example:
 }
 ```
 
-This allows experiments to be modified without recompiling the C++ simulator.
+### ACC Example
+
+```json
+{
+  "name": "Adaptive Cruise Control - Lead Vehicle Braking",
+  "outputFile": "results/adaptive_cruise_control.csv",
+  "initialVelocity": 15.0,
+  "acceleration": 0.0,
+  "steeringAngle": 0.0,
+  "wheelbase": 2.7,
+  "duration": 15.0,
+  "dt": 0.1,
+  "integrationMethod": "RK4",
+  "cruiseControlEnabled": false,
+  "adaptiveCruiseControlEnabled": true,
+  "leadVehicleInitialDistance": 35.0,
+  "leadVehicleInitialVelocity": 20.0,
+  "leadVehicleBrakeStart": 4.0,
+  "leadVehicleBrakeEnd": 6.0,
+  "leadVehicleBrakeAcceleration": -4.0,
+  "desiredTimeHeadway": 1.5,
+  "minimumFollowingDistance": 5.0,
+  "accGapKp": 0.35,
+  "accRelativeVelocityKp": 0.8,
+  "minimumAcceleration": -5.0,
+  "maximumAcceleration": 3.0
+}
+```
+
+This configuration-driven design allows experiments to be changed without recompiling the simulator.
 
 ---
 
@@ -464,83 +594,38 @@ This mechanism is used for lane-change scenarios.
 
 Tests longitudinal acceleration behavior.
 
-Example:
-
-```text
-Initial velocity: 5 m/s
-Acceleration: 2 m/s^2
-Steering angle: 0 rad
-```
-
 ### Emergency Braking
 
-Tests vehicle deceleration and non-negative velocity clamping.
-
-Example:
-
-```text
-Initial velocity: 25 m/s
-Acceleration: -6 m/s^2
-```
+Tests deceleration and non-negative velocity clamping.
 
 ### Constant Turn
 
-Tests continuous curved vehicle motion and compares the simulated trajectory with the analytical turning radius:
-
-```text
-R = L / tan(delta)
-```
+Tests curved motion against the analytical turning radius.
 
 ### Lane Change
 
-Uses time-dependent steering events to validate:
-
-- Steering schedules
-- Lateral displacement
-- Heading evolution
-- Scenario-driven control input changes
+Tests time-dependent steering events, lateral displacement, and heading evolution.
 
 ### Cruise Control
 
-Tests closed-loop longitudinal speed tracking from:
+Tests closed-loop speed tracking with PI control, actuator limits, and anti-windup.
 
-```text
-5 m/s
-```
+### Adaptive Cruise Control
 
-to:
-
-```text
-20 m/s
-```
-
-using PI control, actuator limits, and anti-windup.
+Tests a lead-vehicle braking event and validates the ego vehicle response and following-gap behavior.
 
 ---
 
 ## Automated Parameter Sweeps
 
-The project automatically generates scenario files from parameter combinations.
-
-Current turn sweep configuration:
+Current turn sweep:
 
 ```json
 {
   "name": "Turn Sweep",
-  "initialVelocityValues": [
-    10.0,
-    15.0,
-    20.0
-  ],
-  "steeringAngleValues": [
-    0.03,
-    0.06,
-    0.09
-  ],
-  "integrationMethods": [
-    "Euler",
-    "RK4"
-  ],
+  "initialVelocityValues": [10.0, 15.0, 20.0],
+  "steeringAngleValues": [0.03, 0.06, 0.09],
+  "integrationMethods": ["Euler", "RK4"],
   "acceleration": 0.0,
   "wheelbase": 2.7,
   "duration": 4.0,
@@ -548,19 +633,15 @@ Current turn sweep configuration:
 }
 ```
 
-Generated scenario files are placed in:
+Generated scenarios are placed in:
 
 ```text
 scenarios/generated/
 ```
 
-The C++ executable automatically discovers and executes them.
-
-### Sweep Validation
-
 The sweep report calculates:
 
-- Expected analytical turning radius
+- Analytical turning radius
 - Measured trajectory radius
 - Absolute radius error
 - Percentage radius error
@@ -568,14 +649,6 @@ The sweep report calculates:
 - Final Y position
 - Final heading
 - Euler/RK4 final-position difference
-
-Current result:
-
-```text
-Total runs: 18
-Passed: 18
-Failed: 0
-```
 
 ---
 
@@ -601,7 +674,7 @@ velocity
 heading
 ```
 
-Current regression result:
+Current result:
 
 ```text
 Total baselines: 4
@@ -609,8 +682,6 @@ Passed: 4
 Failed: 0
 Missing: 0
 ```
-
-This detects unintended changes in simulator behavior.
 
 ---
 
@@ -639,20 +710,22 @@ Validation includes:
 - No negative velocity
 - Commanded acceleration behavior
 - Measured acceleration
-- Acceleration error
 - Trajectory behavior
 - Cruise-control tracking requirements
+- ACC safety and tracking checks
 - Turning-radius accuracy
 - Regression RMSE
 - Numerical convergence
 
-Validation failures return a non-zero exit code and stop the pipeline.
+Validation failures return a non-zero exit code and fail the automated workflow.
 
 ---
 
 ## Simulation Data Output
 
-Each simulation generates CSV output with columns such as:
+Each simulation generates CSV output.
+
+Base columns include:
 
 ```text
 time
@@ -667,11 +740,21 @@ target_velocity
 speed_error
 ```
 
-This allows simulation output to be reprocessed independently from the C++ engine.
+ACC simulations additionally include:
+
+```text
+lead_vehicle_position
+lead_vehicle_velocity
+lead_vehicle_acceleration
+actual_gap
+desired_gap
+gap_error
+relative_velocity
+```
 
 ---
 
-## Data Reprocessing
+## Data Reprocessing and Visualization
 
 Python is used for:
 
@@ -680,24 +763,26 @@ Python is used for:
 - Metric extraction
 - Trajectory plotting
 - Controller performance analysis
+- ACC analysis
 - Regression comparison
 - Parameter-sweep comparison
 - Convergence analysis
+- Animated simulation replay
 - Report generation
 
-This separates simulation execution from post-processing and mirrors larger engineering simulation workflows.
+The simulation engine and visualization are intentionally separated. The C++ simulator writes data, while Python independently replays and analyzes the generated results.
 
 ---
 
-## Automated Pipeline
+## Automated Local Pipeline
 
-Run the complete workflow with:
+Run:
 
 ```powershell
 .\run_pipeline.ps1
 ```
 
-The pipeline performs:
+The local pipeline performs:
 
 ```text
 Step 1   Generate Euler/RK4 sweep scenarios
@@ -716,13 +801,40 @@ Step 13  Generate Euler/RK4 sweep plots
 Step 14  Generate the final simulation report
 ```
 
-A failed validation step terminates the pipeline.
+The GitHub Actions workflow additionally runs the ACC scenario and ACC validation.
 
-Successful execution ends with:
+---
+
+## Continuous Integration
+
+The repository includes:
 
 ```text
-PIPELINE COMPLETED SUCCESSFULLY
+.github/workflows/ci.yml
 ```
+
+The GitHub Actions workflow automatically:
+
+1. Checks out the repository
+2. Sets up Python
+3. Installs analysis dependencies
+4. Configures CMake
+5. Builds the C++ targets
+6. Runs CTest
+7. Generates parameter-sweep scenarios
+8. Runs the standard simulations
+9. Runs the ACC scenario
+10. Validates standard simulation output
+11. Validates cruise control
+12. Validates Adaptive Cruise Control
+13. Generates the sweep report
+14. Runs regression tests
+15. Executes Euler/RK4 comparison
+16. Executes timestep sensitivity analysis
+17. Verifies the timestep CSV artifact
+18. Runs convergence analysis
+
+A failed build, test, or validation causes the workflow to fail.
 
 ---
 
@@ -731,9 +843,14 @@ PIPELINE COMPLETED SUCCESSFULLY
 ```text
 vehicle-simulation/
 |
+|-- .github/
+|   `-- workflows/
+|       `-- ci.yml
+|
 |-- CMakeLists.txt
 |-- run_pipeline.ps1
 |-- README.md
+|-- .gitignore
 |
 |-- include/
 |   |-- scenario.hpp
@@ -754,6 +871,7 @@ vehicle-simulation/
 |   |-- constant_turn.json
 |   |-- lane_change.json
 |   |-- cruise_control.json
+|   |-- adaptive_cruise_control.json
 |   `-- generated/
 |
 |-- sweeps/
@@ -767,6 +885,8 @@ vehicle-simulation/
 |-- analysis/
 |   |-- analyze.py
 |   |-- analyze_cruise_control.py
+|   |-- analyze_acc.py
+|   |-- visualize_simulation.py
 |   |-- cruise_tuning_sweep.py
 |   |-- select_cruise_gains.py
 |   |-- generate_sweep.py
@@ -782,6 +902,14 @@ vehicle-simulation/
 |   |-- constant_turn_baseline.csv
 |   |-- lane_change_baseline.csv
 |   `-- legacy/
+|
+|-- docs/
+|   |-- adaptive_cruise_control_demo.gif
+|   |-- lane_change_demo.gif
+|   |-- cruise_control_tracking.png
+|   |-- timestep_convergence.png
+|   |-- euler_rk4_radius_error.png
+|   `-- euler_rk4_position_difference.png
 |
 |-- results/
 |
@@ -808,17 +936,18 @@ CTest
 
 ### Python
 
-Python 3 with:
+Python 3.12 with:
 
 ```text
 pandas
 matplotlib
+pillow
 ```
 
 Install dependencies:
 
 ```powershell
-python -m pip install pandas matplotlib
+python -m pip install pandas matplotlib pillow
 ```
 
 ---
@@ -859,45 +988,54 @@ C:\msys64\ucrt64\bin\ctest.exe --test-dir build-cmake --output-on-failure
 .\build-cmake\main.exe
 ```
 
-This executes standard scenarios and generated sweep scenarios.
-
-### Run a Single Scenario
+### Run Cruise Control
 
 ```powershell
 .\build-cmake\main.exe .\scenarios\cruise_control.json
 ```
 
-Other examples:
+### Run Adaptive Cruise Control
 
 ```powershell
-.\build-cmake\main.exe .\scenarios\acceleration.json
+.\build-cmake\main.exe .\scenarios\adaptive_cruise_control.json
 ```
+
+---
+
+## Validation Commands
+
+### Standard Scenarios
 
 ```powershell
-.\build-cmake\main.exe .\scenarios\constant_turn.json
+python .\analysis\analyze.py
 ```
 
-Single-scenario mode is useful for:
+### Cruise Control
 
-- Debugging
-- Controller tuning
-- Batch execution
-- Automated experiment orchestration
+```powershell
+python .\analysis\analyze_cruise_control.py
+```
+
+### Adaptive Cruise Control
+
+```powershell
+python .\analysis\analyze_acc.py
+```
+
+### Regression Tests
+
+```powershell
+python .\analysis\regression_test.py
+```
 
 ---
 
 ## Controller Tuning
 
-Run:
+Run the tuning sweep:
 
 ```powershell
 python .\analysis\cruise_tuning_sweep.py
-```
-
-This generates:
-
-```text
-results/cruise_control_tuning_summary.csv
 ```
 
 Then select the best valid controller:
@@ -906,47 +1044,11 @@ Then select the best valid controller:
 python .\analysis\select_cruise_gains.py
 ```
 
-The selection script:
-
-1. Loads tuning results
-2. Applies engineering acceptance criteria
-3. Filters invalid controllers
-4. Ranks valid controllers
-5. Selects the best configuration
-6. Updates `scenarios/cruise_control.json`
-
 Current selected gains:
 
 ```text
 Kp = 1.2
 Ki = 0.05
-```
-
----
-
-## Cruise-Control Validation
-
-Run the scenario:
-
-```powershell
-.\build-cmake\main.exe .\scenarios\cruise_control.json
-```
-
-Then validate:
-
-```powershell
-python .\analysis\analyze_cruise_control.py
-```
-
-Expected result:
-
-```text
-Final speed error <= 0.5 m/s: True
-Overshoot <= 5%: True
-Steady-state error <= 0.5 m/s: True
-Settled inside 2% band: True
-
-CRUISE CONTROL RESULT: PASS
 ```
 
 ---
@@ -969,25 +1071,6 @@ Generate the report:
 
 ```powershell
 python .\analysis\sweep_report.py
-```
-
----
-
-## Regression Tests
-
-```powershell
-python .\analysis\regression_test.py
-```
-
-Expected result:
-
-```text
-Total baselines: 4
-Passed: 4
-Failed: 0
-Missing: 0
-
-OVERALL REGRESSION RESULT: PASS
 ```
 
 ---
@@ -1020,9 +1103,37 @@ python .\analysis\plot_integration_comparison.py
 
 ---
 
+## Simulation Replay
+
+Replay the cruise-control result:
+
+```powershell
+python .\analysis\visualize_simulation.py .\results\cruise_control.csv
+```
+
+Replay the lane-change result:
+
+```powershell
+python .\analysis\visualize_simulation.py .\results\lane_change.csv
+```
+
+Replay Adaptive Cruise Control:
+
+```powershell
+python .\analysis\visualize_simulation.py .\results\adaptive_cruise_control.csv
+```
+
+Export an ACC GIF:
+
+```powershell
+python .\analysis\visualize_simulation.py .\results\adaptive_cruise_control.csv --save-gif
+```
+
+---
+
 ## Generated Outputs
 
-Important outputs include:
+Representative outputs include:
 
 ```text
 results/acceleration.csv
@@ -1030,56 +1141,21 @@ results/emergency_braking.csv
 results/constant_turn.csv
 results/lane_change.csv
 results/cruise_control.csv
+results/adaptive_cruise_control.csv
 
-results/cruise_control_tracking.png
 results/cruise_control_tuning_summary.csv
-
 results/turn_sweep_summary.csv
 results/integration_method_comparison.csv
-
 results/timestep_sensitivity.csv
-results/timestep_convergence.png
 
+results/cruise_control_tracking.png
+results/timestep_convergence.png
 results/euler_rk4_position_difference.png
 results/euler_rk4_radius_error.png
-
 results/simulation_report.md
 ```
 
----
-
-## Key Results
-
-### Cruise Controller
-
-```text
-Kp:                  1.2
-Ki:                  0.05
-Target velocity:    20 m/s
-Final velocity:     20.058 m/s
-Rise time:           4.1 s
-Settling time:       5.6 s
-Overshoot:           0.35 %
-Final error:         0.058 m/s
-Steady-state error:  0.062 m/s
-```
-
-### Numerical Integration
-
-```text
-Euler mean radius error: 0.399356 m
-RK4 mean radius error:   0.000002 m
-```
-
-### Timestep Convergence
-
-```text
-dt = 0.50 s -> 4.007105 m
-dt = 0.20 s -> 1.602196 m
-dt = 0.10 s -> 0.801052 m
-dt = 0.05 s -> 0.400520 m
-dt = 0.01 s -> 0.080104 m
-```
+Selected demonstration assets are copied into `docs/` so they can be rendered directly on GitHub.
 
 ---
 
@@ -1087,24 +1163,23 @@ dt = 0.01 s -> 0.080104 m
 
 ### C++
 
-- Modular application architecture
-- C++17
+- Modular C++17 architecture
 - Struct-based state representation
 - Numerical simulation
 - Filesystem handling
-- File-based configuration
+- JSON configuration
 - Exception handling
 - CMake build configuration
 
 ### Vehicle Dynamics
 
 - Kinematic bicycle model
-- Longitudinal dynamics
+- Longitudinal motion
 - Lateral motion
-- Steering-angle inputs
+- Steering inputs
 - Heading evolution
 - Constant-radius turning
-- Lane-change maneuver modeling
+- Lane-change maneuver simulation
 
 ### Control Systems
 
@@ -1115,15 +1190,16 @@ dt = 0.01 s -> 0.080104 m
 - Integral windup
 - Anti-windup
 - Controller gain tuning
-- Transient-response analysis
-- Steady-state error analysis
+- Adaptive Cruise Control
+- Relative-velocity feedback
+- Time-headway spacing policy
 
 ### Numerical Methods
 
 - Explicit Euler integration
 - Runge-Kutta 4th order integration
 - Timestep sensitivity
-- Convergence behavior
+- Numerical convergence
 - Analytical validation
 - Numerical error comparison
 
@@ -1135,15 +1211,7 @@ dt = 0.01 s -> 0.080104 m
 - RMSE-based comparison
 - Parameter sweeps
 - Automated pass/fail decisions
-
-### Data Processing
-
-- Simulation CSV generation
-- Python post-processing
-- pandas
-- Metric calculation
-- matplotlib visualization
-- Automated reporting
+- ACC collision-avoidance checks
 
 ### Automation
 
@@ -1151,6 +1219,7 @@ dt = 0.01 s -> 0.080104 m
 - CTest
 - PowerShell
 - Python
+- GitHub Actions
 - One-command simulation pipeline
 - Generated experiments
 - Automated validation
@@ -1162,23 +1231,27 @@ dt = 0.01 s -> 0.080104 m
 
 ### Why JSON?
 
-JSON separates simulation configuration from simulation implementation and allows scenarios to be modified without recompiling C++ code.
+JSON separates simulation configuration from implementation and allows scenarios to be modified without recompiling C++ code.
 
 ### Why C++ for Simulation?
 
-C++ is well suited to performance-sensitive simulation and embedded-system workflows. It provides experience with deterministic simulation loops, numerical integration, strongly typed interfaces, and compiled model components.
+C++ is well suited to performance-sensitive simulation workflows and provides experience with deterministic loops, numerical integration, strongly typed interfaces, and compiled model components.
 
 ### Why Python for Analysis?
 
-Python provides a convenient environment for data processing, validation, plotting, controller tuning, and report generation.
+Python provides a convenient environment for data processing, validation, plotting, controller tuning, visualization, and report generation.
 
 ### Why Euler and RK4?
 
-Euler provides a simple baseline integrator, while RK4 provides substantially higher numerical accuracy. Comparing both allows the project to study timestep effects, numerical convergence, trajectory error, and integration tradeoffs.
+Euler provides a simple baseline integrator, while RK4 provides substantially higher numerical accuracy. Comparing them allows the project to study timestep effects, convergence, trajectory error, and integration tradeoffs.
 
 ### Why Regression Testing?
 
-A simulator can still compile after a change unintentionally alters model behavior. Regression testing detects those changes by comparing new trajectories against validated references.
+A simulator can still compile after a change unintentionally alters model behavior. Regression testing detects these changes by comparing new trajectories against validated references.
+
+### Why Separate Simulation and Visualization?
+
+The C++ simulator writes deterministic CSV outputs, while Python independently replays and analyzes those outputs. This keeps the simulation engine decoupled from presentation and post-processing.
 
 ---
 
@@ -1194,17 +1267,14 @@ Potential extensions include:
 - Dynamic bicycle model
 - Lateral tire forces
 - Pacejka tire model
-- Vehicle mass
-- Yaw dynamics
+- Vehicle mass and yaw dynamics
 
 ### Driving Features
 
-- PID cruise control
-- Adaptive cruise control
-- Lead-vehicle simulation
 - Automatic emergency braking
 - Lane keeping
 - Trajectory tracking
+- More advanced ACC strategies
 
 ### Scenario System
 
@@ -1220,9 +1290,9 @@ Potential extensions include:
 - Parallel simulation execution
 - Multiprocessing
 - Distributed batch execution
-- Cloud simulation workers
-- Docker execution
+- Docker
 - Linux support
+- Cloud simulation workers
 
 ### Validation
 
@@ -1232,17 +1302,9 @@ Potential extensions include:
 - Automatic requirement mapping
 - Configurable tolerance files
 
-### CI/CD
-
-- GitHub Actions
-- Automatic build
-- Automatic CTest execution
-- Automatic simulation regression
-- Generated test reports
-
 ### MATLAB / Simulink
 
-A future extension could implement the same vehicle model in MATLAB/Simulink and automatically compare:
+A future extension could implement the same vehicle model in MATLAB/Simulink and compare:
 
 ```text
 C++ simulation output
@@ -1271,6 +1333,10 @@ Actuator saturation              COMPLETE
 Anti-windup                      COMPLETE
 Controller tuning                COMPLETE
 Controller validation            COMPLETE
+Adaptive Cruise Control          COMPLETE
+Lead-vehicle simulation          COMPLETE
+ACC validation                   COMPLETE
+Animated simulation replay       COMPLETE
 Parameter sweep                  COMPLETE
 Euler/RK4 comparison             COMPLETE
 Regression testing               COMPLETE
@@ -1278,7 +1344,8 @@ Timestep sensitivity             COMPLETE
 Convergence analysis             COMPLETE
 Automated plots                  COMPLETE
 Automated report generation      COMPLETE
-One-command pipeline             COMPLETE
+GitHub Actions CI                COMPLETE
+One-command local pipeline       COMPLETE
 ```
 
 ---
@@ -1286,12 +1353,14 @@ One-command pipeline             COMPLETE
 ## Final Validation Summary
 
 ```text
-Cruise-control validation: PASS
-Turn sweep:                18 / 18 PASS
-Regression suite:           4 / 4 PASS
-Numerical convergence:     PASS
-Euler vs RK4 analysis:     PASS
-Final automated pipeline:  PASS
+Cruise-control validation:        PASS
+Adaptive Cruise Control:          PASS
+ACC collision avoidance:          PASS
+Turn sweep:                 18 / 18 PASS
+Regression suite:              4 / 4 PASS
+Numerical convergence:          PASS
+Euler vs RK4 analysis:          PASS
+GitHub Actions CI:              PASS
 ```
 
 ---
@@ -1306,20 +1375,24 @@ JSON scenario configuration
 Euler and RK4 integration
 PI cruise control
 Anti-windup
+Adaptive Cruise Control
+Lead-vehicle simulation
 Controller tuning
 Automated parameter sweeps
 Python data reprocessing
+Animated simulation replay
 Numerical convergence analysis
 Regression testing
 Automated validation
+GitHub Actions CI
 Visualization
 Report generation
 ```
 
-Run the complete workflow with:
+Run the local workflow with:
 
 ```powershell
 .\run_pipeline.ps1
 ```
 
-The result is a reproducible simulation and validation pipeline that demonstrates core concepts used in larger automotive simulation and automated testing environments.
+The repository demonstrates a reproducible simulation-and-validation workflow built around vehicle dynamics, driving-feature integration, numerical analysis, automated testing, and continuous integration.
