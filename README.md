@@ -37,6 +37,11 @@ It supports:
 The goal is to demonstrate how vehicle simulation models can be implemented, tested, validated, reprocessed, and executed repeatedly through an automated workflow.
 
 ---
+## Adaptive Cruise Control Demo
+
+The simulator includes an Adaptive Cruise Control scenario in which a lead vehicle performs a braking maneuver and the ego vehicle automatically adjusts its longitudinal acceleration while maintaining a safe following distance.
+
+![Adaptive Cruise Control simulation](docs/adaptive_cruise_control_demo.gif)
 
 ## Simulation Demo
 
