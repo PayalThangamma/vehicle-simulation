@@ -12,7 +12,15 @@ on:
 
 jobs:
   build-test-validate:
-    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - ubuntu-latest
+
+    runs-on: ${{ matrix.os }}
 
     steps:
 
@@ -30,74 +38,121 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pandas matplotlib pillow
 
+
       - name: Configure CMake
         run: cmake -S . -B build-cmake
+
 
       - name: Build
         run: cmake --build build-cmake --config Release
 
+
       - name: Run CTest
         run: ctest --test-dir build-cmake -C Release --output-on-failure
 
+
       - name: Generate sweep scenarios
-        run: python .\analysis\generate_sweep.py
+        run: python ./analysis/generate_sweep.py
 
-      - name: Run simulations
-        run: .\build-cmake\Release\main.exe
 
-      - name: Run Adaptive Cruise Control scenario
-        run: .\build-cmake\Release\main.exe .\scenarios\adaptive_cruise_control.json
+      - name: Run simulations on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\build-cmake\Release\main.exe
+
+
+      - name: Run ACC scenario on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\build-cmake\Release\main.exe .\scenarios\adaptive_cruise_control.json
+
+      - name: Run simulations on Linux
+        if: runner.os == 'Linux'
+        run: |
+          ./build-cmake/main
+
+
+      - name: Run ACC scenario on Linux
+        if: runner.os == 'Linux'
+        run: |
+          ./build-cmake/main ./scenarios/adaptive_cruise_control.json
 
       - name: Validate simulation outputs
-        run: python .\analysis\analyze.py
+        run: python ./analysis/analyze.py
+
 
       - name: Validate cruise control
-        run: python .\analysis\analyze_cruise_control.py
+        run: python ./analysis/analyze_cruise_control.py
+
 
       - name: Validate Adaptive Cruise Control
-        run: python .\analysis\analyze_acc.py
+        run: python ./analysis/analyze_acc.py
+
 
       - name: Generate sweep report
-        run: python .\analysis\sweep_report.py
+        run: python ./analysis/sweep_report.py
+
 
       - name: Run regression tests
-        run: python .\analysis\regression_test.py
+        run: python ./analysis/regression_test.py
 
-      - name: Run integration comparison
-        run: .\build-cmake\Release\integration_compare.exe
 
-      - name: Run timestep sensitivity
-        run: .\build-cmake\Release\timestep_sensitivity.exe
+      - name: Run integration comparison on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\build-cmake\Release\integration_compare.exe
+
+
+      - name: Run timestep sensitivity on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\build-cmake\Release\timestep_sensitivity.exe
+
+      - name: Run integration comparison on Linux
+        if: runner.os == 'Linux'
+        run: |
+          ./build-cmake/integration_compare
+
+
+      - name: Run timestep sensitivity on Linux
+        if: runner.os == 'Linux'
+        run: |
+          ./build-cmake/timestep_sensitivity
 
       - name: Verify timestep sensitivity output
         shell: pwsh
         run: |
-          if (-not (Test-Path "results\timestep_sensitivity.csv")) {
-            Write-Error "results\timestep_sensitivity.csv was not generated"
+          if (-not (Test-Path "results/timestep_sensitivity.csv")) {
+            Write-Error "results/timestep_sensitivity.csv was not generated"
             exit 1
           }
 
           Write-Host "Timestep sensitivity CSV found:"
-          Get-Item "results\timestep_sensitivity.csv"
+          Get-Item "results/timestep_sensitivity.csv"
 
           Write-Host ""
           Write-Host "CSV contents:"
-          Get-Content "results\timestep_sensitivity.csv"
+          Get-Content "results/timestep_sensitivity.csv"
 
       - name: Run convergence analysis
-        run: python .\analysis\plot_convergence.py
+        run: python ./analysis/plot_convergence.py
+
 
       - name: Generate integration comparison plots
-        run: python .\analysis\plot_integration_comparison.py
+        run: python ./analysis/plot_integration_comparison.py
 
       - name: Generate simulation report
-        run: python .\analysis\generate_report.py
+        run: python ./analysis/generate_report.py
 
       - name: Upload simulation artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: simulation-results
+          name: simulation-results-${{ runner.os }}
           path: |
             results/*.csv
             results/*.png
@@ -105,11 +160,12 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+
       - name: Upload demo assets
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: demo-assets
+          name: demo-assets-${{ runner.os }}
           path: |
             docs/*.png
             docs/*.gif
