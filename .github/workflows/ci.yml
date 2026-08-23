@@ -60,17 +60,14 @@ jobs:
       - name: Generate sweep report
         run: python .\analysis\sweep_report.py
 
-
       - name: Run regression tests
         run: python .\analysis\regression_test.py
 
       - name: Run integration comparison
         run: .\build-cmake\Release\integration_compare.exe
 
-
       - name: Run timestep sensitivity
         run: .\build-cmake\Release\timestep_sensitivity.exe
-
 
       - name: Verify timestep sensitivity output
         shell: pwsh
@@ -89,3 +86,32 @@ jobs:
 
       - name: Run convergence analysis
         run: python .\analysis\plot_convergence.py
+
+      - name: Generate integration comparison plots
+        run: python .\analysis\plot_integration_comparison.py
+
+      - name: Generate simulation report
+        run: python .\analysis\generate_report.py
+
+      - name: Upload simulation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulation-results
+          path: |
+            results/*.csv
+            results/*.png
+            results/*.md
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload demo assets
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-assets
+          path: |
+            docs/*.png
+            docs/*.gif
+          if-no-files-found: warn
+          retention-days: 14
