@@ -1,0 +1,63 @@
+name: Vehicle Simulation CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-test-validate:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas matplotlib pillow
+
+      - name: Configure CMake
+        run: cmake -S . -B build-cmake
+
+      - name: Build
+        run: cmake --build build-cmake --config Release
+
+      - name: Run CTest
+        run: ctest --test-dir build-cmake -C Release --output-on-failure
+
+      - name: Generate sweep scenarios
+        run: python .\analysis\generate_sweep.py
+
+      - name: Run simulations
+        run: .\build-cmake\Release\main.exe
+
+      - name: Validate simulation outputs
+        run: python .\analysis\analyze.py
+
+      - name: Validate cruise control
+        run: python .\analysis\analyze_cruise_control.py
+
+      - name: Generate sweep report
+        run: python .\analysis\sweep_report.py
+
+      - name: Run regression tests
+        run: python .\analysis\regression_test.py
+
+      - name: Run integration comparison
+        run: .\build-cmake\Release\integration_compare.exe
+
+      - name: Run timestep sensitivity
+        run: .\build-cmake\Release\timestep_sensitivity.exe
+
+      - name: Run convergence analysis
+        run: python .\analysis\plot_convergence.py
