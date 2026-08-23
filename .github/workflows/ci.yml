@@ -59,5 +59,20 @@ jobs:
       - name: Run timestep sensitivity
         run: .\build-cmake\Release\timestep_sensitivity.exe
 
+      - name: Verify timestep sensitivity output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "results\timestep_sensitivity.csv")) {
+            Write-Error "results\timestep_sensitivity.csv was not generated"
+            exit 1
+          }
+
+          Write-Host "Timestep sensitivity CSV found"
+          Get-Item "results\timestep_sensitivity.csv"
+
+          Write-Host ""
+          Write-Host "CSV contents:"
+          Get-Content "results\timestep_sensitivity.csv"
+
       - name: Run convergence analysis
         run: python .\analysis\plot_convergence.py
