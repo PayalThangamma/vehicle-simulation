@@ -38,6 +38,12 @@ The goal is to demonstrate how vehicle simulation models can be implemented, tes
 
 ---
 
+## Simulation Demo
+
+The framework can replay generated simulation data as an animated vehicle trajectory with live telemetry.
+
+![Vehicle simulation replay](docs/lane_change_demo.gif)
+
 ## Results
 
 ### Cruise-Control Tracking
